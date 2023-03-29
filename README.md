@@ -1,2 +1,2 @@
-# Projeto_SO
+# Projeto SO
 Simulador para Internet das Coisas em contexto Habitacional
