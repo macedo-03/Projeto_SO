@@ -24,7 +24,7 @@ typedef struct
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 int i;
-int shm_alert, shm_sensor, shm_data;
+int shmid, shm_alert, shm_sensor, shm_data;
 char sensors_id[0][32]; //TODO n de sensors = MAX_SENSORS
 key_data *data_base;
 alert *alert_list;
@@ -112,26 +112,29 @@ void system_manager(char config_file[]){
     fclose(fp);
 
 
-//    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(sensor), IPC_CREAT|0700);
-//    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data), IPC_CREAT|0700);
-//    if (shmid < 1) exit(0);
-//    data_base = (key_data *) shmat(shmid, NULL, 0);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(sensor), IPC_CREAT|0700);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data), IPC_CREAT|0700);
+    if (shmid < 1) exit(0);
+    void *shm_global = (key_data *) shmat(shmid, NULL, 0);
+    if ((void*) shm_global == (void*) -1) exit(0);
+    data_base = (key_data*) shm_global;
+    alert_list = (alert*) shm_global + MAX_ALERTS * sizeof(alert);
+    sensor_list = (sensor *)shm_global + MAX_SENSORS * sizeof(sensor);
+
+//    shm_data = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data), IPC_CREAT|0700);
+//    if (shm_data < 1) exit(0);
+//    data_base = (key_data *) shmat(shm_data, NULL, 0);
 //    if ((void*) data_base == (void*) -1) exit(0);
-
-    shm_data = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data), IPC_CREAT|0700);
-    if (shm_data < 1) exit(0);
-    data_base = (key_data *) shmat(shm_data, NULL, 0);
-    if ((void*) data_base == (void*) -1) exit(0);
-
-    shm_alert = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(alert), IPC_CREAT|0700);
-    if (shm_alert < 1) exit(0);
-    alert_list = (alert *) shmat(shm_alert, NULL, 0);
-    if ((void*) alert_list == (void*) -1) exit(0);
-
-    shm_sensor = shmget(IPC_PRIVATE, MAX_SENSORS * sizeof(sensor), IPC_CREAT|0700);
-    if (shm_sensor < 1) exit(0);
-    sensor_list = (sensor *) shmat(shm_sensor, NULL, 0);
-    if ((void*) sensor_list == (void*) -1) exit(0);
+//
+//    shm_alert = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(alert), IPC_CREAT|0700);
+//    if (shm_alert < 1) exit(0);
+//    alert_list = (alert *) shmat(shm_alert, NULL, 0);
+//    if ((void*) alert_list == (void*) -1) exit(0);
+//
+//    shm_sensor = shmget(IPC_PRIVATE, MAX_SENSORS * sizeof(sensor), IPC_CREAT|0700);
+//    if (shm_sensor < 1) exit(0);
+//    sensor_list = (sensor *) shmat(shm_sensor, NULL, 0);
+//    if ((void*) sensor_list == (void*) -1) exit(0);
 
 
     while (i < N_WORKERS){
