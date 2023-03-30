@@ -9,6 +9,7 @@ int main(int argc, char *argv[]){
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
         }
+        //verificar input
 
     srand(getpid());
     while(1){
