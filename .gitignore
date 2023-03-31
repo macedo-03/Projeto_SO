@@ -2,3 +2,6 @@
 CMakeLists.txt
 cmake-build-debug
 .idea
+sensor
+system_manager
+user_console
