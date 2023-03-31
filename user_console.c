@@ -1,11 +1,23 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
+#include "costumio.h"
+
 
 int main(int argc, char *argv[]){
 
+    if (argc != 1) {
+        printf("user_console {console id}\n");
+        exit(-1);
+    }
+    else{
+        if(!input_str(argv[0], 0)){ // console id
+            printf("user_console {console id}\n");
+            exit(-1);
+        }
+    }
 
-    char console_id = argv[0];
 
     char cmd[64], id[32], key[32];
     char str_min[16], str_max[16];
@@ -20,7 +32,10 @@ int main(int argc, char *argv[]){
            "- add_alert [id] [chave] [min] [max]\n"
            "- remove_alert[id]\n"
            "- list_alerts\n\n");
-    scanf("%s", cmd);
+
+    do{
+        scanf("%s", cmd);
+    } while (!input_str(cmd, 1));
     //verificacao de input
     while (strcmp(cmd, "exit\n")!=0){
 
@@ -44,5 +59,6 @@ int main(int argc, char *argv[]){
         scanf("%s", cmd);
         //verificacao de inputs
     }
-    }
+
 }
+

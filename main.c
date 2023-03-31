@@ -188,47 +188,49 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file acces
 
 int main() {
 
-    char log_name[] = "log.txt";
-    FILE *log_file = fopen(log_name, "a+"); //read and append
-    if (log_file == NULL)
-    {
-        printf("Error: could not open file %s", log_name);
-    }
-    else{
-        fscanf(log_file, "%d\n%d\n%d\n%d\n%d", &QUEUE_SZ,&N_WORKERS, &MAX_KEYS, &MAX_SENSORS, &MAX_ALERTS);
-        if(QUEUE_SZ<1 ||N_WORKERS<1 || MAX_KEYS<1 || MAX_SENSORS<1 || MAX_ALERTS<0)
-            printf("Error: data from file %s is not correct", log_name);
-    }
-    fclose(log_file);
 
-
-    //LogFile - system_manager, workers, alert_watcher
-        pthread_mutex_lock(&log_mutex);
-        //write messages
-        pthread_mutex_unlock(&log_mutex);
-
-
-
-    //Shared memory - workers and alert_watcher
-
-    //when read-only process tries to access shared memory
-        pthread_mutex_lock(&reader_mutex);
-        n_readers++;
-        if(n_readers==1) pthread_mutex_lock(&shm_mutex);
-        pthread_mutex_unlock(&reader_mutex);
-
-        // >> read from shm
-
-        pthread_mutex_lock(&reader_mutex);
-        n_readers--;
-        if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
-        pthread_mutex_unlock(&reader_mutex);
-
-
-    //when write process tries to access shared memory
-        pthread_mutex_lock(&shm_mutex);
-        // >> write to shm
-        pthread_mutex_unlock(&shm_mutex);
+//
+//    char log_name[] = "log.txt";
+//    FILE *log_file = fopen(log_name, "a+"); //read and append
+//    if (log_file == NULL)
+//    {
+//        printf("Error: could not open file %s", log_name);
+//    }
+//    else{
+//        fscanf(log_file, "%d\n%d\n%d\n%d\n%d", &QUEUE_SZ,&N_WORKERS, &MAX_KEYS, &MAX_SENSORS, &MAX_ALERTS);
+//        if(QUEUE_SZ<1 ||N_WORKERS<1 || MAX_KEYS<1 || MAX_SENSORS<1 || MAX_ALERTS<0)
+//            printf("Error: data from file %s is not correct", log_name);
+//    }
+//    fclose(log_file);
+//
+//
+//    //LogFile - system_manager, workers, alert_watcher
+//        pthread_mutex_lock(&log_mutex);
+//        //write messages
+//        pthread_mutex_unlock(&log_mutex);
+//
+//
+//
+//    //Shared memory - workers and alert_watcher
+//
+//    //when read-only process tries to access shared memory
+//        pthread_mutex_lock(&reader_mutex);
+//        n_readers++;
+//        if(n_readers==1) pthread_mutex_lock(&shm_mutex);
+//        pthread_mutex_unlock(&reader_mutex);
+//
+//        // >> read from shm
+//
+//        pthread_mutex_lock(&reader_mutex);
+//        n_readers--;
+//        if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
+//        pthread_mutex_unlock(&reader_mutex);
+//
+//
+//    //when write process tries to access shared memory
+//        pthread_mutex_lock(&shm_mutex);
+//        // >> write to shm
+//        pthread_mutex_unlock(&shm_mutex);
 
 
     return 0;
