@@ -5,10 +5,7 @@
 #include <sys/shm.h> // shared memory
 #include <pthread.h> // thread
 #include "costumio.h"
-
-pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write
-pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
-pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
+#include <time.h>
 
 typedef struct
 {
@@ -22,14 +19,22 @@ typedef struct
     int alert_min, alert_max;
 } alert;
 
+pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
+pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
+pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
+
+pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
+pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
+
+
+pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //alert alert_watcher that the shm has been updated
 
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
-int internal_queue_size, keys, sensors, alerts;
-int i, n_readers=0;
+int count_sensors, count_alerts;
+int i;
 int shmid;
-char sensors_id[0][32]; //TODO n de sensors = MAX_SENSORS
 FILE *log_file;
 
 
@@ -37,13 +42,22 @@ key_data *data_base;
 alert *alert_list;
 char *sensor_list;
 
+time_t t;
+struct tm *time_info;
+
+char* get_time(){
+    time_info = localtime(&t);
+    char *temp = "";
+    sprintf(temp, "%2d:%2d:%2d", time_info->tm_hour, time_info->tm_min, time_info->tm_sec);
+    return temp;
+}
 
 void worker_process(int worker_number){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("WORKER %d READY", worker_number);
-    fprintf(log_file, "WORKER %d READY", worker_number);
+    printf("%s WORKER %d READY", get_time(), worker_number);
+    fprintf(log_file, "%s WORKER %d READY",get_time(), worker_number);
     pthread_mutex_unlock(&log_mutex);
 
 
@@ -96,8 +110,8 @@ void alerts_watcher_process(){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("PROCESS ALERTS_WATCHER CREATED");
-    fprintf(log_file, "PROCESS ALERTS_WATCHER CREATED");
+    printf("%s PROCESS ALERTS_WATCHER CREATED", get_time());
+    fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
 
 }
@@ -105,8 +119,8 @@ void alerts_watcher_process(){
 void *sensor_reader(void *id){
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("THREAD SENSOR_READER CREATED");
-    fprintf(log_file, "THREAD SENSOR_READER CREATED");
+    printf("%sTHREAD SENSOR_READER CREATED", get_time());
+    fprintf(log_file, "%sTHREAD SENSOR_READER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
 
 }
@@ -114,8 +128,8 @@ void *sensor_reader(void *id){
 void *console_reader(void *id){
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("THREAD CONSOLE_READER CREATED");
-    fprintf(log_file, "THREAD CONSOLE_READER CREATED");
+    printf("%s THREAD CONSOLE_READER CREATED", get_time());
+    fprintf(log_file, "%s THREAD CONSOLE_READER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
 }
 
@@ -123,18 +137,13 @@ void *dispatcher(void *id){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("THREAD DISPATCHER CREATED");
-    fprintf(log_file, "THREAD DISPATCHER CREATED");
+    printf("%s THREAD DISPATCHER CREATED", get_time());
+    fprintf(log_file, "%s THREAD DISPATCHER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
 
 }
 
 
-//void system_manager(char config_file[]){
-//
-//
-//
-//}
 
 
 
@@ -182,9 +191,9 @@ int main(int argc, char *argv[]) {
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
-    data_base = (key_data*) shm_global;
-    alert_list = (alert*) shm_global + MAX_KEYS * sizeof(key_data);
-    sensor_list = (char *)shm_global + MAX_ALERTS * sizeof(alert);
+    data_base = (key_data*) shm_global;                                 //store data sent by sensors
+    alert_list = (alert*) shm_global + MAX_KEYS * sizeof(key_data);     //store alerts
+    sensor_list = (char *)shm_global + MAX_ALERTS * sizeof(alert);      //store sensors
 
 
 
@@ -199,13 +208,14 @@ int main(int argc, char *argv[]) {
     else{
         printf("Error: data from file %s is not correct", log_name);
     }
+    time(&t);
+
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("HOME_IOT SIMULATOR STARTING");
-    fprintf(log_file, "HOME_IOT SIMULATOR STARTING");
+    printf("%s HOME_IOT SIMULATOR STARTING", get_time());
+    fprintf(log_file, "%s HOME_IOT SIMULATOR STARTING", get_time());
     pthread_mutex_unlock(&log_mutex);
-
 
 
 
