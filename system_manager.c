@@ -217,7 +217,7 @@ int main(int argc, char *argv[]) {
         //write messages
         get_time();
         printf("%s HOME_IOT SIMULATOR STARTING\n", temp);
-        fprintf(log_file, "%s HOME_IOT SIMULATOR STARTING\n", temp);
+        fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR STARTING\n", temp);
         fflush(log_file);
         pthread_mutex_unlock(&log_mutex);
     }
@@ -264,6 +264,13 @@ int main(int argc, char *argv[]) {
 
 
 
+    pthread_mutex_lock(&log_mutex);
+    get_time();
+    printf("%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
+    fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
+//    fflush(log_file);
+    pthread_mutex_unlock(&log_mutex);
+
     //join threads
     pthread_join(thread_console_reader, NULL);
     pthread_join(thread_sensor_reader, NULL);
@@ -273,6 +280,27 @@ int main(int argc, char *argv[]) {
     for (i=0;i<N_WORKERS+1; i++) {
         wait(NULL);
     }
+
+    shmdt(shm_global);
+    shmctl(shmid, IPC_RMID, NULL);
+
+    pthread_mutex_lock(&log_mutex);
+    get_time();
+    printf("%s HOME_IOT SIMULATOR CLOSING\n", temp);
+    fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR CLOSING\n", temp);
+//    fflush(log_file);
+    pthread_mutex_unlock(&log_mutex);
+
+    fclose(log_file);
+
+    pthread_mutex_destroy(&shm_update_mutex);
+    pthread_mutex_destroy(&reader_mutex);
+    pthread_mutex_destroy(&log_mutex);
+    pthread_mutex_destroy(&sensors_counter_mutex);
+    pthread_mutex_destroy(&alerts_counter_mutex);
+
+    pthread_cond_destroy(&shm_alert_watcher_cv);
+
 
 //    //LogFile - system_manager, workers, alert_watcher
 //    pthread_mutex_lock(&log_mutex);
