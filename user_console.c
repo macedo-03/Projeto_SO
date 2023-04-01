@@ -5,16 +5,15 @@
 
 
 int main(int argc, char *argv[]){
-
-    if (argc != 1) {
+    if (argc != 2) {
         printf("user_console {console id}\n");
         exit(-1);
     }
-    else{
-        if(!input_str(argv[0], 0)){ // console id
-            printf("user_console {console id}\n");
-            exit(-1);
-        }
+    else if(!input_str(argv[1], 0)){ // console id
+
+        printf("user_console {console id}\n");
+        exit(-1);
+
     }
 
 
@@ -28,12 +27,9 @@ int main(int argc, char *argv[]){
            "- reset\n"
            "- sensors\n"
            "- add_alert [id] [chave] [min] [max]\n"
-           "- remove_alert[id]\n"
+           "- remove_alert [id]\n"
            "- list_alerts\n\n");
 
-//    do{
-//        scanf("%s", cmd);
-//    } while (!input_str(cmd, 1));
 
     scanf("%s", cmd);
     if(!input_str(cmd, 1)){
@@ -42,8 +38,9 @@ int main(int argc, char *argv[]){
     }
 
 
-    while (strcmp(cmd, "exit\n")!=0){
-        if(strcmp(cmd, "add_alert")==0){
+    while (strcmp(cmd, "EXIT")!=0){
+
+        if(strcmp(cmd, "ADD_ALERT")==0){
             scanf("%s %s %s %s", id, key, str_min, str_max);
 
             if(!(convert_int(str_min, &min) &&
@@ -52,28 +49,34 @@ int main(int argc, char *argv[]){
                     input_str(key, 0))){
                 printf("Erro de formatacao dos argumentos\n");
                 exit(-1);
+            } else if(max<=min){
+                printf("Valor maximo tem de ser maior que o minimo (max > min)\n");
+                exit(-1);
             }
+            printf("add_alert\n");
         }
-        else if(strcmp(cmd, "remove_alert")==0){
+        else if(strcmp(cmd, "REMOVE_ALERT")==0){
             scanf("%s", id);
             if(!input_str(id, 0)){
                 printf("Erro de formatacao do argumento\n");
                 exit(-1);
             }
+            printf("remove_alert\n");
         }
-        else if(strcmp(cmd, "stats")==0){
-            printf("%s\n", cmd);
+        else if(strcmp(cmd, "STATS")==0){
+            printf("stats\n");
         }
-        else if(strcmp(cmd, "reset")==0){
-            printf("%s\n", cmd);
+        else if(strcmp(cmd, "RESET")==0){
+            printf("reset\n");
         }
-        else if(strcmp(cmd, "list_alerts")==0){
-            printf("%s\n", cmd);
+        else if(strcmp(cmd, "LIST_ALERTS")==0){
+            printf("list_alerts");
+        }
+        else{
+            printf("Comando nao reconhecido\n");
+            exit(-1);
         }
 
-//        do{
-//            scanf("%s", cmd);
-//        } while (!input_str(cmd, 1));
 
         scanf("%s", cmd);
         if(!input_str(cmd, 1)){

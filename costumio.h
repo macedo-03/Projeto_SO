@@ -5,6 +5,8 @@
 #ifndef PROJETO_SO_COSTUMIO_H
 #define PROJETO_SO_COSTUMIO_H
 
+
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <errno.h>

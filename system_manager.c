@@ -202,8 +202,6 @@ int main(int argc, char *argv[]) {
     sensor_list = (char *)shm_global + MAX_ALERTS * sizeof(alert);      //store sensors
 
 
-
-
     //creates log
     char log_name[] = "log.txt";
     log_file = fopen(log_name, "a+"); //read and append
@@ -223,12 +221,6 @@ int main(int argc, char *argv[]) {
     }
 
 
-
-
-
-
-
-
     //creates WORKERS
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
@@ -238,7 +230,7 @@ int main(int argc, char *argv[]) {
         }
         else if (childpid == -1)
         {
-            perror("Failed to create worker process");
+            perror("Failed to create worker process\n");
             exit(1);
         }
         ++i;
@@ -251,7 +243,7 @@ int main(int argc, char *argv[]) {
     }
     else if (childpid == -1)
     {
-        perror("Failed to create alert_watcher process");
+        perror("Failed to create alert_watcher process\n");
         exit(1);
     }
 
@@ -267,7 +259,7 @@ int main(int argc, char *argv[]) {
     pthread_mutex_lock(&log_mutex);
     get_time();
     printf("%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
-    fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
+    fprintf(log_file, "%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
 //    fflush(log_file);
     pthread_mutex_unlock(&log_mutex);
 
@@ -287,7 +279,7 @@ int main(int argc, char *argv[]) {
     pthread_mutex_lock(&log_mutex);
     get_time();
     printf("%s HOME_IOT SIMULATOR CLOSING\n", temp);
-    fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR CLOSING\n", temp);
+    fprintf(log_file, "%s HOME_IOT SIMULATOR CLOSING\n", temp);
 //    fflush(log_file);
     pthread_mutex_unlock(&log_mutex);
 

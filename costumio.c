@@ -57,12 +57,17 @@ int input_str(char str[], int underscore){
     //enquanto os caracteres da string forem letras ou underscore _
     while (i<len){
         //adiciona o dígito à string "converting"
-        if(underscore==1 && !(isalpha(str[i]) || isdigit(str[i]) || str[i] == '_')) return 0;
-        else if(underscore==0 && !(isalpha(str[i]) || isdigit(str[i]))) return 0;
+        if(underscore==1 && !(isalpha(str[i]) || isdigit(str[i]) || str[i] == '_')){
+            printf("1bosta: %c\n", str[i]);
+            return 0;
+        }
+        else if(underscore==0 && !(isalpha(str[i]) || isdigit(str[i]))){
+            printf("0bosta: %c\n", str[i]);
+            return 0;
+        }
         str[i] = (char) toupper(str[i]);
         i++;
 
-        if(!(isalpha(str[i]) || isdigit(str[i])) || (underscore==1 && str[i] == '_')) return 0; //ouyasgdhfbiouyahjfgbaeryuiofjgasd
     }
     return 1; //true
 }
