@@ -1,6 +1,5 @@
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
 #include <unistd.h> // process
 #include <sys/shm.h> // shared memory
 #include <pthread.h> // thread
@@ -44,20 +43,23 @@ char *sensor_list;
 
 time_t t;
 struct tm *time_info;
+char temp[10];
 
-char* get_time(){
+void get_time(){
+//    printf("timer\n");
     time_info = localtime(&t);
-    char *temp = "";
     sprintf(temp, "%2d:%2d:%2d", time_info->tm_hour, time_info->tm_min, time_info->tm_sec);
-    return temp;
+
+//    printf("end timer\n");
 }
 
 void worker_process(int worker_number){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("%s WORKER %d READY", get_time(), worker_number);
-    fprintf(log_file, "%s WORKER %d READY",get_time(), worker_number);
+    get_time(temp);
+    printf("%s WORKER %d READY\n", temp, worker_number+1);
+    fprintf(log_file, "%s WORKER %d READY\n",temp, worker_number+1);
     pthread_mutex_unlock(&log_mutex);
 
 
@@ -110,17 +112,21 @@ void alerts_watcher_process(){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("%s PROCESS ALERTS_WATCHER CREATED", get_time());
-    fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED", get_time());
+    get_time();
+    printf("%s PROCESS ALERTS_WATCHER CREATED\n", temp);
+    fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
 
 }
 
+
+
 void *sensor_reader(){
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("%sTHREAD SENSOR_READER CREATED", get_time());
-    fprintf(log_file, "%sTHREAD SENSOR_READER CREATED", get_time());
+    get_time();
+    printf("%s THREAD SENSOR_READER CREATED\n", temp);
+    fprintf(log_file, "%s THREAD SENSOR_READER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
     pthread_exit(NULL);
 }
@@ -128,8 +134,9 @@ void *sensor_reader(){
 void *console_reader(){
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("%s THREAD CONSOLE_READER CREATED", get_time());
-    fprintf(log_file, "%s THREAD CONSOLE_READER CREATED", get_time());
+    get_time();
+    printf("%s THREAD CONSOLE_READER CREATED\n", temp);
+    fprintf(log_file, "%s THREAD CONSOLE_READER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
     pthread_exit(NULL);
 }
@@ -138,8 +145,9 @@ void *dispatcher(){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
-    printf("%s THREAD DISPATCHER CREATED", get_time());
-    fprintf(log_file, "%s THREAD DISPATCHER CREATED", get_time());
+    get_time();
+    printf("%s THREAD DISPATCHER CREATED\n", temp);
+    fprintf(log_file, "%s THREAD DISPATCHER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
     pthread_exit(NULL);
 
@@ -150,35 +158,31 @@ void *dispatcher(){
 
 
 int main(int argc, char *argv[]) {
-
-    if (argc != 1) {
-        printf("home_iot {configuration file}\n");
+    if (argc != 2) {
+        printf("erro\nhome_iot {configuration file}\n");
         exit(-1);
     }
     else{
-        FILE *fp = fopen(argv[0], "r");
+        FILE *fp = fopen(argv[1], "r");
         if (fp == NULL)
         {
-            printf("Error: could not open file %s", argv[0]);
+            printf("Error: could not open file %s\n", argv[1]);
             exit(-1);
         }
         else{
             int n_args = fscanf(fp, "%s\n%s\n%s\n%s\n%s", QUEUE_SZ_str,N_WORKERS_str, MAX_KEYS_str, MAX_SENSORS_str, MAX_ALERTS_str);
-            if(fscanf(fp, "%s\n%s\n%s\n%s\n%s", QUEUE_SZ_str,N_WORKERS_str, MAX_KEYS_str, MAX_SENSORS_str, MAX_ALERTS_str)!=5){
-                printf("Error: data from file %s is not correct", argv[0]);
 
-            }
             if(n_args!=5 ||
                 !convert_int(QUEUE_SZ_str, &QUEUE_SZ) ||
                 !convert_int(N_WORKERS_str, &N_WORKERS) ||
                 !convert_int(MAX_KEYS_str, &MAX_KEYS) ||
                 !convert_int(MAX_SENSORS_str, &MAX_SENSORS) ||
                 !convert_int(MAX_ALERTS_str, &MAX_ALERTS)){
-                printf("Error: data from file %s is not correct", argv[0]);
+                printf("Error: data from file %s is not correct\n", argv[1]);
                 exit(-1);
             }
             if(QUEUE_SZ<1 ||N_WORKERS<1 || MAX_KEYS<1 || MAX_SENSORS<1 || MAX_ALERTS<0){
-                printf("Error: data from file %s is not correct", argv[0]);
+                printf("Error: data from file %s is not correct\n", argv[1]);
                 exit(-1);
             }
         }
@@ -205,19 +209,23 @@ int main(int argc, char *argv[]) {
     log_file = fopen(log_name, "a+"); //read and append
     if (log_file == NULL)
     {
-        printf("Error: could not open file %s", log_name);
+        printf("Error: could not open file %s\n", log_name);
     }
     else{
-        printf("Error: data from file %s is not correct", log_name);
+        time(&t);
+        pthread_mutex_lock(&log_mutex);
+        //write messages
+        get_time();
+        printf("%s HOME_IOT SIMULATOR STARTING\n", temp);
+        fprintf(log_file, "%s HOME_IOT SIMULATOR STARTING\n", temp);
+        fflush(log_file);
+        pthread_mutex_unlock(&log_mutex);
     }
-    time(&t);
 
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    printf("%s HOME_IOT SIMULATOR STARTING", get_time());
-    fprintf(log_file, "%s HOME_IOT SIMULATOR STARTING", get_time());
-    pthread_mutex_unlock(&log_mutex);
+
+
+
 
 
 
@@ -247,11 +255,24 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
 
-    //creates threads
-    pthread_t thread; long id=0;
-    pthread_create(&thread, NULL, console_reader, (void*) &id); id++;
-    pthread_create(&thread, NULL, sensor_reader, (void*) &id); id++;
-    pthread_create(&thread, NULL, dispatcher, (void*) &id);
+    //create threads
+    pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
+    pthread_create(&thread_console_reader, NULL, console_reader, NULL);
+    pthread_create(&thread_sensor_reader, NULL, sensor_reader, NULL);
+    pthread_create(&thread_dispatcher, NULL, dispatcher, NULL);
+
+
+
+
+    //join threads
+    pthread_join(thread_console_reader, NULL);
+    pthread_join(thread_sensor_reader, NULL);
+    pthread_join(thread_dispatcher, NULL);
+
+    //wait for workers and alert_watcher
+    for (i=0;i<N_WORKERS+1; i++) {
+        wait(NULL);
+    }
 
 //    //LogFile - system_manager, workers, alert_watcher
 //    pthread_mutex_lock(&log_mutex);
@@ -280,6 +301,9 @@ int main(int argc, char *argv[]) {
 //            pthread_mutex_lock(&shm_mutex);
 //            // >> write to shm
 //            pthread_mutex_unlock(&shm_mutex);
+
+
+
 
 
     return 0;
