@@ -32,6 +32,7 @@ int my_atoi(char str[], int *int_number){
 int convert_int(char str[], int* number){
     int i=0;
     int len= (int) strlen(str);
+    if(str[i]=='-') i++;
     while (i<len){
         if(!isdigit(str[i])) return 0;
         i++;

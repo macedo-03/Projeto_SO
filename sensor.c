@@ -5,29 +5,34 @@
 #include "costumio.h"
 
 int main(int argc, char *argv[]){
-//        char sensor_id[], char key[], int interval,  int min, int max){
+//        char sensor_id[], int interval, char key[],  int min, int max){
         int time_interval, min_value, max_value;
 
-        if (argc != 5) {
+        if (argc != 6) {
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
         }
-        else if(!(  convert_int(argv[1], &time_interval)    &&
-                    convert_int(argv[3], &min_value)      &&
-                    convert_int(argv[4], &max_value)     &&
-                    input_str(argv[0], 0)   &&   // sensor_id
-                    input_str(argv[2], 0)        // key
+        if(!(  convert_int(argv[2], &time_interval)    &&
+                    convert_int(argv[4], &min_value)      &&
+                    convert_int(argv[5], &max_value)     &&
+                    input_str(argv[1], 0)   &&   // sensor_id
+                    input_str(argv[3], 0)        // key
                     )){
-
+            printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
+            exit(-1);
+        } else if(time_interval<0 || min_value>=max_value){
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
         }
-
-
 
     srand(getpid());
+//
+//    printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value) + min_value);
+//    sleep(time_interval);
+//    printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value) + min_value);
+
     while(1){
-        printf("%s#%s#%d", argv[0], argv[2], rand() % (max_value-min_value) + min_value);
+        printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value);
         sleep(time_interval);
     }
     return 0;

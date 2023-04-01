@@ -7,7 +7,7 @@ CC=gcc
 CFLAGS= -Wall -Wextra
 
 # Targets
-all: sensor user_console system_manager
+all: sensor user_console home_iot
 
 custumio.o: costumio.c costumio.h
 	$(CC) $(CFLAGS) -c costumio.c
@@ -22,7 +22,7 @@ sensor.o: sensor.c costumio.h
 
 
 
-system_manager: system_manager.o costumio.o
+home_iot: system_manager.o costumio.o
 	$(CC) $(CFLAGS) -lpthread $^ -o $@
 
 system_manager.o: system_manager.c costumio.h
