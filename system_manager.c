@@ -4,7 +4,7 @@
 #include <unistd.h> // process
 #include <sys/shm.h> // shared memory
 #include <pthread.h> // thread
-
+#include "costumio.h"
 
 pthread_mutex_t shm_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write
 pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
@@ -22,19 +22,17 @@ typedef struct
     int alert_min, alert_max;
 } alert;
 
-//typedef struct
-//{
-//    char sensor_id[32];
-//} sensor;
+
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
+char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 int internal_queue_size, keys, sensors, alerts;
 int i, n_readers=0;
 int shmid;
 char sensors_id[0][32]; //TODO n de sensors = MAX_SENSORS
 FILE *log_file;
 
-//int shm_alert, shm_sensor, shm_data;
+
 key_data *data_base;
 alert *alert_list;
 char *sensor_list;
@@ -132,22 +130,52 @@ void *dispatcher(void *id){
 }
 
 
-void system_manager(char config_file[]){
-    pid_t childpid;
+//void system_manager(char config_file[]){
+//
+//
+//
+//}
 
-    FILE *fp = fopen(config_file, "r");
-    if (fp == NULL)
-    {
-        printf("Error: could not open file %s", config_file);
+
+
+int main(int argc, char *argv[]) {
+
+    if (argc != 1) {
+        printf("home_iot {configuration file}\n");
+        exit(-1);
     }
     else{
-        fscanf(fp, "%d\n%d\n%d\n%d\n%d", &QUEUE_SZ,&N_WORKERS, &MAX_KEYS, &MAX_SENSORS, &MAX_ALERTS);
-        //verificar input
-        if(QUEUE_SZ<1 ||N_WORKERS<1 || MAX_KEYS<1 || MAX_SENSORS<1 || MAX_ALERTS<0)
-            printf("Error: data from file %s is not correct", config_file);
-    }
-    fclose(fp);
+        FILE *fp = fopen(argv[0], "r");
+        if (fp == NULL)
+        {
+            printf("Error: could not open file %s", argv[0]);
+            exit(-1);
+        }
+        else{
+            int n_args = fscanf(fp, "%s\n%s\n%s\n%s\n%s", QUEUE_SZ_str,N_WORKERS_str, MAX_KEYS_str, MAX_SENSORS_str, MAX_ALERTS_str);
+            if(fscanf(fp, "%s\n%s\n%s\n%s\n%s", QUEUE_SZ_str,N_WORKERS_str, MAX_KEYS_str, MAX_SENSORS_str, MAX_ALERTS_str)!=5){
+                printf("Error: data from file %s is not correct", argv[0]);
 
+            }
+            if(n_args!=5 ||
+                !convert_int(QUEUE_SZ_str, &QUEUE_SZ) ||
+                !convert_int(N_WORKERS_str, &N_WORKERS) ||
+                !convert_int(MAX_KEYS_str, &MAX_KEYS) ||
+                !convert_int(MAX_SENSORS_str, &MAX_SENSORS) ||
+                !convert_int(MAX_ALERTS_str, &MAX_ALERTS)){
+                printf("Error: data from file %s is not correct", argv[0]);
+                exit(-1);
+            }
+            if(QUEUE_SZ<1 ||N_WORKERS<1 || MAX_KEYS<1 || MAX_SENSORS<1 || MAX_ALERTS<0){
+                printf("Error: data from file %s is not correct", argv[0]);
+                exit(-1);
+            }
+        }
+        fclose(fp);
+    }
+
+
+    id_t childpid;
 
     //creates memory
     shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]), IPC_CREAT|0700);
@@ -157,6 +185,9 @@ void system_manager(char config_file[]){
     data_base = (key_data*) shm_global;
     alert_list = (alert*) shm_global + MAX_KEYS * sizeof(key_data);
     sensor_list = (char *)shm_global + MAX_ALERTS * sizeof(alert);
+
+
+
 
     //creates log
     char log_name[] = "log.txt";
@@ -175,10 +206,10 @@ void system_manager(char config_file[]){
     fprintf(log_file, "HOME_IOT SIMULATOR STARTING");
     pthread_mutex_unlock(&log_mutex);
 
-//    fclose(log_file);
 
 
 
+    //creates WORKERS
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
         {
@@ -193,8 +224,9 @@ void system_manager(char config_file[]){
         ++i;
     }
 
+    //creates ALERT WATCHER
     if ((childpid = fork()) == 0){
-        //alerts watcher
+        alerts_watcher_process();
         exit(0);
     }
     else if (childpid == -1)
@@ -203,48 +235,39 @@ void system_manager(char config_file[]){
         exit(1);
     }
 
+    //creates threads
     pthread_t thread; long id=0;
     pthread_create(&thread, NULL, console_reader, (void*) &id); id++;
     pthread_create(&thread, NULL, sensor_reader, (void*) &id); id++;
     pthread_create(&thread, NULL, dispatcher, (void*) &id);
 
-
-}
-
-
-
-int main() {
-
-
-
-
-    //LogFile - system_manager, workers, alert_watcher
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    pthread_mutex_unlock(&log_mutex);
-
-
-
-    //Shared memory - workers and alert_watcher
-
-        //when read-only process tries to access shared memory
-            pthread_mutex_lock(&reader_mutex);
-            n_readers++;
-            if(n_readers==1) pthread_mutex_lock(&shm_mutex);
-            pthread_mutex_unlock(&reader_mutex);
-
-            // >> read from shm
-
-            pthread_mutex_lock(&reader_mutex);
-            n_readers--;
-            if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
-            pthread_mutex_unlock(&reader_mutex);
-
-
-        //when write process tries to access shared memory
-            pthread_mutex_lock(&shm_mutex);
-            // >> write to shm
-            pthread_mutex_unlock(&shm_mutex);
+//    //LogFile - system_manager, workers, alert_watcher
+//    pthread_mutex_lock(&log_mutex);
+//    //write messages
+//    pthread_mutex_unlock(&log_mutex);
+//
+//
+//
+//    //Shared memory - workers and alert_watcher
+//
+//        //when read-only process tries to access shared memory
+//            pthread_mutex_lock(&reader_mutex);
+//            n_readers++;
+//            if(n_readers==1) pthread_mutex_lock(&shm_mutex);
+//            pthread_mutex_unlock(&reader_mutex);
+//
+//            // >> read from shm
+//
+//            pthread_mutex_lock(&reader_mutex);
+//            n_readers--;
+//            if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
+//            pthread_mutex_unlock(&reader_mutex);
+//
+//
+//        //when write process tries to access shared memory
+//            pthread_mutex_lock(&shm_mutex);
+//            // >> write to shm
+//            pthread_mutex_unlock(&shm_mutex);
 
 
     return 0;
