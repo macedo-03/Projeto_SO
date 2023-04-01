@@ -20,7 +20,6 @@ int main(int argc, char *argv[]){
 
     char cmd[64], id[32], key[32];
     char str_min[16], str_max[16];
-    char *ptr;
     int min, max;
 
     printf("Menu:\n"

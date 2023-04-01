@@ -116,30 +116,32 @@ void alerts_watcher_process(){
 
 }
 
-void *sensor_reader(void *id){
+void *sensor_reader(){
     pthread_mutex_lock(&log_mutex);
     //write messages
     printf("%sTHREAD SENSOR_READER CREATED", get_time());
     fprintf(log_file, "%sTHREAD SENSOR_READER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
-
+    pthread_exit(NULL);
 }
 
-void *console_reader(void *id){
+void *console_reader(){
     pthread_mutex_lock(&log_mutex);
     //write messages
     printf("%s THREAD CONSOLE_READER CREATED", get_time());
     fprintf(log_file, "%s THREAD CONSOLE_READER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
+    pthread_exit(NULL);
 }
 
-void *dispatcher(void *id){
+void *dispatcher(){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
     printf("%s THREAD DISPATCHER CREATED", get_time());
     fprintf(log_file, "%s THREAD DISPATCHER CREATED", get_time());
     pthread_mutex_unlock(&log_mutex);
+    pthread_exit(NULL);
 
 }
 
