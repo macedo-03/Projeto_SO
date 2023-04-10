@@ -75,6 +75,9 @@ int main(int argc, char *argv[]){
         else if(strcmp(cmd, "LIST_ALERTS")==0){
             printf("list_alerts");
         }
+        else if(strcmp(cmd, "SENSORS")==0){
+            printf("sensors");
+        }
         else{
             printf("Comando nao reconhecido\n");
             exit(-1);
