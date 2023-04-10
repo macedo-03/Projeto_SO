@@ -73,10 +73,10 @@ int main(int argc, char *argv[]){
             printf("reset\n");
         }
         else if(strcmp(cmd, "LIST_ALERTS")==0){
-            printf("list_alerts");
+            printf("list_alerts\n");
         }
         else if(strcmp(cmd, "SENSORS")==0){
-            printf("sensors");
+            printf("sensors\n");
         }
         else{
             printf("Comando nao reconhecido\n");
