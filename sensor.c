@@ -1,3 +1,6 @@
+//José Francisco Branquinho Macedo - 2021221301
+//Miguel Filipe Mota Cruz - 2021219294
+
 #include <unistd.h> // process
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,10 +29,7 @@ int main(int argc, char *argv[]){
         }
 
     srand(getpid());
-//
-//    printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value) + min_value);
-//    sleep(time_interval);
-//    printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value) + min_value);
+
 
     while(1){
         printf("%s#%s#%d\n", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value);

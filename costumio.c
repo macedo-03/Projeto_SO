@@ -1,10 +1,7 @@
-//
-// Created by Miguel Mota Cruz on 31/03/2023.
-//
+//José Francisco Branquinho Macedo - 2021221301
+//Miguel Filipe Mota Cruz - 2021219294
 
 #include "costumio.h"
-
-
 
 //função semelhante ao atoi() mas que indica se houve erro de conversão
 //caso a função seja bem sucedida -> return true

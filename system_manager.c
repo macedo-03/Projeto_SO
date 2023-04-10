@@ -1,3 +1,6 @@
+//José Francisco Branquinho Macedo - 2021221301
+//Miguel Filipe Mota Cruz - 2021219294
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h> // process
@@ -25,9 +28,9 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file acces
 pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
 pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
 
-
 pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //alert alert_watcher that the shm has been updated
 
+pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
@@ -154,7 +157,15 @@ void *dispatcher(){
 }
 
 
+void cleaner(){
+    pthread_mutex_destroy(&shm_update_mutex);
+    pthread_mutex_destroy(&reader_mutex);
+    pthread_mutex_destroy(&log_mutex);
+    pthread_mutex_destroy(&sensors_counter_mutex);
+    pthread_mutex_destroy(&alerts_counter_mutex);
 
+    pthread_cond_destroy(&shm_alert_watcher_cv);
+}
 
 
 int main(int argc, char *argv[]) {
@@ -248,7 +259,6 @@ int main(int argc, char *argv[]) {
     }
 
     //create threads
-    pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
     pthread_create(&thread_console_reader, NULL, console_reader, NULL);
     pthread_create(&thread_sensor_reader, NULL, sensor_reader, NULL);
     pthread_create(&thread_dispatcher, NULL, dispatcher, NULL);
@@ -285,42 +295,7 @@ int main(int argc, char *argv[]) {
 
     fclose(log_file);
 
-    pthread_mutex_destroy(&shm_update_mutex);
-    pthread_mutex_destroy(&reader_mutex);
-    pthread_mutex_destroy(&log_mutex);
-    pthread_mutex_destroy(&sensors_counter_mutex);
-    pthread_mutex_destroy(&alerts_counter_mutex);
-
-    pthread_cond_destroy(&shm_alert_watcher_cv);
-
-
-//    //LogFile - system_manager, workers, alert_watcher
-//    pthread_mutex_lock(&log_mutex);
-//    //write messages
-//    pthread_mutex_unlock(&log_mutex);
-//
-//
-//
-//    //Shared memory - workers and alert_watcher
-//
-//        //when read-only process tries to access shared memory
-//            pthread_mutex_lock(&reader_mutex);
-//            n_readers++;
-//            if(n_readers==1) pthread_mutex_lock(&shm_mutex);
-//            pthread_mutex_unlock(&reader_mutex);
-//
-//            // >> read from shm
-//
-//            pthread_mutex_lock(&reader_mutex);
-//            n_readers--;
-//            if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
-//            pthread_mutex_unlock(&reader_mutex);
-//
-//
-//        //when write process tries to access shared memory
-//            pthread_mutex_lock(&shm_mutex);
-//            // >> write to shm
-//            pthread_mutex_unlock(&shm_mutex);
+    cleaner();
 
 
 

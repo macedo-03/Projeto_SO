@@ -1,3 +1,6 @@
+//José Francisco Branquinho Macedo - 2021221301
+//Miguel Filipe Mota Cruz - 2021219294
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>

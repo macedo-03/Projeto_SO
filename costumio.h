@@ -1,6 +1,5 @@
-//
-// Created by Miguel Mota Cruz on 31/03/2023.
-//
+//José Francisco Branquinho Macedo - 2021221301
+//Miguel Filipe Mota Cruz - 2021219294
 
 #ifndef PROJETO_SO_COSTUMIO_H
 #define PROJETO_SO_COSTUMIO_H
