@@ -5,3 +5,4 @@ cmake-build-debug
 sensor
 system_manager
 user_console
+log.txt
