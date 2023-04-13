@@ -23,7 +23,7 @@ sensor.o: sensor.c costumio.h
 
 
 home_iot: system_manager.o costumio.o
-	$(CC) $(CFLAGS) -lpthread $^ -o $@
+	$(CC) $(CFLAGS) -pthread $^ -o $@
 
 system_manager.o: system_manager.c costumio.h
 	$(CC) $(CFLAGS) -c system_manager.c
