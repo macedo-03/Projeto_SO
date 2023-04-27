@@ -8,11 +8,19 @@
 #include <pthread.h> // thread
 #include "costumio.h"
 #include <time.h>
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <assert.h>
+#include <sys/msg.h>
+
+#define CONSOLE_PIPE "CONSOLE_PIPE"
+#define SENSOR_PIPE "SENSOR_PIPE"
+#define MQ_KEY 4444
 
 typedef struct
 {
-    int last_value, min_value, max_value, average;
-    double n_updates;
+    int last_value, min_value, max_value,n_updates ;
+    double average;
 } key_data;
 
 typedef struct
@@ -37,6 +45,8 @@ char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MA
 int count_sensors, count_alerts;
 int i;
 int shmid;
+int console_pipe_id, sensor_pipe_id;
+int mq_id;
 FILE *log_file;
 
 
@@ -204,7 +214,7 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]), IPC_CREAT|0700);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]), IPC_CREAT|0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
@@ -229,6 +239,14 @@ int main(int argc, char *argv[]) {
         fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR STARTING\n", temp);
         fflush(log_file);
         pthread_mutex_unlock(&log_mutex);
+    }
+
+
+
+    //open/create msg queue
+    if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
+        perror("Cannot open or create message queue");
+        exit(-1);
     }
 
 
@@ -257,6 +275,30 @@ int main(int argc, char *argv[]) {
         perror("Failed to create alert_watcher process\n");
         exit(1);
     }
+
+
+    //opens named pipes
+    unlink(CONSOLE_PIPE);
+    if((mkfifo(CONSOLE_PIPE, O_CREAT | O_EXCL |0777)<0) && errno!=EEXIST){
+        perror("Cannot create pipe.");
+        exit(-1);
+    }
+    if((console_pipe_id = open(CONSOLE_PIPE, O_RDWR)) <0){
+        perror("Cannot open pipe");
+        exit(-1);
+    }
+
+    unlink(SENSOR_PIPE);
+    if((mkfifo(SENSOR_PIPE, O_CREAT | O_EXCL |0777)<0) && errno!=EEXIST){
+        perror("Cannot create pipe.");
+        exit(-1);
+    }
+    if((sensor_pipe_id = open(SENSOR_PIPE, O_RDWR)) <0){
+        perror("Cannot open pipe");
+        exit(-1);
+    }
+
+
 
     //create threads
     pthread_create(&thread_console_reader, NULL, console_reader, NULL);
