@@ -15,7 +15,7 @@ int main(int argc, char *argv[]){
         int time_interval, min_value, max_value;
 
         //abrir sensor para leitura
-        if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
+        if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
                 perror("Cannot open pipe for writing!\n");
                 exit(-1); 
         }

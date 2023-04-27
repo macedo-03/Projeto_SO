@@ -7,8 +7,9 @@
 #include <fcntl.h>
 #include "costumio.h"
 
-#define PIPE_NAME "CONSOLE_PIPE"
-int pipe_id;
+#define CONSOLE_PIPE "CONSOLE_PIPE"
+#define MQ_KEY 4444
+int pipe_id, mq_id;
 
 
 int main(int argc, char *argv[]){
@@ -28,8 +29,15 @@ int main(int argc, char *argv[]){
     char str_min[16], str_max[16];
     int min, max;
 
-    if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
+    //abrir pipe para escrita
+    if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
                 perror("Cannot open pipe for writing!\n");
+                exit(-1); 
+    }
+
+    //abrir a message queue
+    if ((mq_id = msgget(MQ_KEY, 0777)) < 0) {
+                perror("Cannot open message queue!\n");
                 exit(-1); 
     }
 
