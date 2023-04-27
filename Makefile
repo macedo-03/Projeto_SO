@@ -39,4 +39,4 @@ user_console.o: user_console.c costumio.h
 
 # Clean target
 clean:
-	rm -f *.o 
+	rm -f *.o sensor user_console home_iot
