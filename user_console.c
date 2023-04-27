@@ -30,7 +30,7 @@ int main(int argc, char *argv[]){
 
     if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
                 perror("Cannot open pipe for writing!\n");
-                exit(0); 
+                exit(-1); 
     }
 
     printf("Menu:\n"
