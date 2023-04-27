@@ -4,7 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include "costumio.h"
+
+#define CONSOLE_PIPE "CONSOLE_PIPE"
+#define MQ_KEY 4444
+int pipe_id, mq_id;
 
 
 int main(int argc, char *argv[]){
@@ -23,6 +28,18 @@ int main(int argc, char *argv[]){
     char cmd[64], id[32], key[32];
     char str_min[16], str_max[16];
     int min, max;
+
+    //abrir pipe para escrita
+    if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
+                perror("Cannot open pipe for writing!\n");
+                exit(-1); 
+    }
+
+    //abrir a message queue
+    if ((mq_id = msgget(MQ_KEY, 0777)) < 0) {
+                perror("Cannot open message queue!\n");
+                exit(-1); 
+    }
 
     printf("Menu:\n"
            "- exit\n"

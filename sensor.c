@@ -4,13 +4,23 @@
 #include <unistd.h> // process
 #include <stdio.h>
 #include <stdlib.h>
+#include <fcntl.h>
 
 #include "costumio.h"
+#define PIPE_NAME "SENSOR_PIPE"
+int pipe_id;
 
 int main(int argc, char *argv[]){
 //        char sensor_id[], int interval, char key[],  int min, int max){
         int time_interval, min_value, max_value;
 
+        //abrir sensor para leitura
+        if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
+                perror("Cannot open pipe for writing!\n");
+                exit(-1); 
+        }
+
+        //validacao dos argumentos
         if (argc != 6) {
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
