@@ -4,7 +4,11 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <fcntl.h>
 #include "costumio.h"
+
+#define PIPE_NAME "CONSOLE_PIPE"
+int pipe_id;
 
 
 int main(int argc, char *argv[]){
@@ -23,6 +27,11 @@ int main(int argc, char *argv[]){
     char cmd[64], id[32], key[32];
     char str_min[16], str_max[16];
     int min, max;
+
+    if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
+                perror("Cannot open pipe for writing!\n");
+                exit(0); 
+    }
 
     printf("Menu:\n"
            "- exit\n"
