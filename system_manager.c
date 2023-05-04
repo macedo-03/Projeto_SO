@@ -21,12 +21,14 @@
 
 typedef struct
 {
+    char key[32];
     int last_value, min_value, max_value,n_updates ;
     double average;
 } key_data;
 
 typedef struct
 {
+    long user_console_id;
     char alert_id[32], key[32];
     int alert_min, alert_max;
 } alert;
@@ -46,10 +48,11 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
-int count_sensors, count_alerts;
+int count_sensors, count_alerts, count_key_data;
 int i;
 int shmid;
 int console_pipe_id, sensor_pipe_id;
+int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
@@ -60,6 +63,7 @@ key_data *data_base;
 alert *alert_list;
 char *sensor_list;
 int *workers_bitmap;
+int *keys_bitmap;
 
 time_t t;
 struct tm *time_info;
@@ -73,7 +77,7 @@ void get_time(){
 //    printf("end timer\n");
 }
 
-void worker_process(int worker_number){
+void worker_process(int worker_number){ //void worker_process(int worker_number, int* from_dispatcher_pipe)
 
     pthread_mutex_lock(&log_mutex);
     //write messages
@@ -131,12 +135,32 @@ void alerts_watcher_process(){
 //        if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
 //        pthread_mutex_unlock(&reader_mutex);
 
+
     pthread_mutex_lock(&log_mutex);
     //write messages
     get_time();
     printf("%s PROCESS ALERTS_WATCHER CREATED\n", temp);
     fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
+
+    for (int j = 0; j < count_key_data; ++j) {
+
+        if(keys_bitmap[j] == 1) { //aquela key foi atualizada
+            keys_bitmap[j] = 0;
+            for (int k = 0; k < count_alerts; ++k) {
+                if (alert_list[k].key == data_base[j].key && (data_base[j].last_value < alert_list[k].alert_min || data_base[j].last_value > alert_list[k].alert_max )) {
+                    Message msg_to_send;
+                    msg_to_send.type = 0;
+                    msg_to_send.message_id = alert_list[k].user_console_id;
+                    sprintf(msg_to_send.cmd, "ALERT!! The alert '%s', related to the key '%s' was activated!\n",
+                            alert_list[k].alert_id, alert_list[k].key);
+                    //TODO: send message to message queue
+                }
+            }
+        }
+    }
+
+
 
 }
 
@@ -231,7 +255,7 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int), IPC_CREAT|0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int), IPC_CREAT|0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
@@ -239,6 +263,7 @@ int main(int argc, char *argv[]) {
     alert_list = (alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
     sensor_list = (char *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert));      //store sensors
     workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]));
+    keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
 
     //codigo para testar shm
     /*
@@ -288,6 +313,12 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
+    //TODO: is this how it works??
+//    disp_work_pipe = malloc(N_WORKERS*sizeof(int)*2);
+//    for (int j = 0; j < N_WORKERS; ++j) {
+//        pipe(disp_work_pipe[j]);
+//    }
+
 
     //create unnamed pipes and send it to workers
     //creates WORKERS
@@ -295,6 +326,7 @@ int main(int argc, char *argv[]) {
         if ((childpid = fork()) == 0)
         {
             worker_process(i);
+//            worker_process(i, disp_work_pipe[i]);
             exit(0);
         }
         else if (childpid == -1)
