@@ -12,6 +12,8 @@ all: sensor user_console home_iot
 custumio.o: costumio.c costumio.h
 	$(CC) $(CFLAGS) -c costumio.c
 
+internal_queue.o: internal_queue.c internal_queue.h
+	$(CC) $(CFLAGS) -c internal_queue.c
 
 
 sensor: sensor.o costumio.o
@@ -22,10 +24,10 @@ sensor.o: sensor.c costumio.h
 
 
 
-home_iot: system_manager.o costumio.o
+home_iot: system_manager.o costumio.o internal_queue.o
 	$(CC) $(CFLAGS) -pthread $^ -o $@
 
-system_manager.o: system_manager.c costumio.h
+system_manager.o: system_manager.c costumio.h internal_queue.h
 	$(CC) $(CFLAGS) -c system_manager.c
 
 
