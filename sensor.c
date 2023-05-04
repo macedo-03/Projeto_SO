@@ -47,6 +47,7 @@ int main(int argc, char *argv[]){
     }
     srand(getpid());
 
+    //TODO: faz sentido o sensor usar a mesma struct? só se for por causa de uniformização
     message m;
     m.message_id = (long) id;
     m.type = 1;
