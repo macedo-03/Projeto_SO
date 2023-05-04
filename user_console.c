@@ -49,7 +49,8 @@ int main(int argc, char *argv[]){
         printf("user_console {console id}\n");
         exit(-1);
     }
-    else if(!input_str(argv[1], 0)){ // console id
+    //TODO: ver questão do NULL como parametro desta função
+    else if(!convert_int(argv[1], NULL)){ // console id
 
         printf("user_console {console id}\n");
         exit(-1);
