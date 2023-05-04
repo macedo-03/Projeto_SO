@@ -15,7 +15,7 @@ int main(int argc, char *argv[]){
         int time_interval, min_value, max_value;
 
         //abrir sensor para leitura
-        if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
+        if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
                 perror("Cannot open pipe for writing!\n");
                 exit(-1); 
         }
@@ -33,7 +33,7 @@ int main(int argc, char *argv[]){
                     )){
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
-        } else if(time_interval<0 || min_value>=max_value){
+        } else if(time_interval<=0 || min_value>=max_value){
             printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
             exit(-1);
         }
