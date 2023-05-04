@@ -7,6 +7,11 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/types.h>
+#include <sys/ipc.h>
+#include <sys/msg.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include "costumio.h"
 
 #define CONSOLE_PIPE "CONSOLE_PIPE"
@@ -22,7 +27,7 @@ typedef struct
 
 
 int pipe_id, mq_id, id, valido = 1;
-pthread_t console_reader;
+pthread_t mq_reader;
 message msg;
 struct sigaction action;
 
@@ -30,12 +35,13 @@ void handler(){
     exit(0);
 }
 
-void read_console(){
+void *read_msq(){
     while (1) {
-        msgrcv(mq_id, &msg, sizeof(message) - sizeof(long), id);
+        msgrcv(mq_id, &msg, sizeof(message) - sizeof(long), id, 0);
         printf("%s", msg.cmd);
     }
     pthread_exit(NULL);
+    return NULL;
 }
 
 int main(int argc, char *argv[]){
@@ -66,8 +72,8 @@ int main(int argc, char *argv[]){
                 exit(-1); 
     }
 
-    id = pid();
-    pthread_create(console_reader, NULL, read_console, NULL);
+    id = getpid();
+    pthread_create(&mq_reader, NULL, read_msq, NULL);
 
     printf("Menu:\n"
            "- exit\n"
@@ -79,8 +85,8 @@ int main(int argc, char *argv[]){
            "- list_alerts\n\n");
 
 
-    
-    scanf("%s", cmd);
+    fgets(buf, BUF_SIZE, stdin);
+    sscanf(buf, "%s", cmd);
     if(!input_str(cmd, 1)){
         printf("Erro de formatacao do comando\n");
         exit(-1);
@@ -90,7 +96,7 @@ int main(int argc, char *argv[]){
     while (strcmp(cmd, "EXIT")!=0){
         valido = 1;
         if(strcmp(cmd, "ADD_ALERT")==0){
-            scanf("%s %s %s %s", alert_id, key, str_min, str_max);
+            sscanf(buf, "%s %s %s %s", alert_id, key, str_min, str_max);
 
             if(!(convert_int(str_min, &min) &&
                     convert_int(str_max, &max) &&
@@ -104,33 +110,29 @@ int main(int argc, char *argv[]){
                 valido = 0;
                 //exit(-1);
             }
-            sprintf(buf, "%s %s %s %d %d", cmd, alert_id, key, min, max);
+            //sprintf(buf, "%s %s %s %d %d", cmd, alert_id, key, min, max);
             printf("add_alert\n");
         }
         else if(strcmp(cmd, "REMOVE_ALERT")==0){
-            scanf("%s", alert_id);
+            sscanf(buf, "%s", alert_id);
             if(!input_str(alert_id, 0)){
                 printf("Erro de formatacao do argumento\n");
                 valido = 0;
                 //exit(-1);
             }
-            sprintf(buf, "%s %s", cmd, alert_id);
+            //sprintf(buf, "%s %s", cmd, alert_id);
             printf("remove_alert\n");
         }
         else if(strcmp(cmd, "STATS")==0){
-            strcpy(buf, cmd);
             printf("stats\n");
         }
         else if(strcmp(cmd, "RESET")==0){
-            strcpy(buf, cmd);
             printf("reset\n");
         }
         else if(strcmp(cmd, "LIST_ALERTS")==0){
-            strcpy(buf, cmd);
             printf("list_alerts\n");
         }
         else if(strcmp(cmd, "SENSORS")==0){
-            strcpy(buf, cmd);
             printf("sensors\n");
         }
         else{
@@ -147,9 +149,10 @@ int main(int argc, char *argv[]){
             write(pipe_id, &m, sizeof(message));
         }
 
-        scanf("%s", cmd);
+        fgets(buf, BUF_SIZE, stdin);
+        sscanf(buf, "%s", cmd);
         if(!input_str(cmd, 1)){
-            printf("Erro de formatacao do comando\n");
+            printf("Erro de formatacao do Comando\n");
             exit(-1);
         }
     }

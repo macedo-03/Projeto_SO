@@ -31,7 +31,7 @@ system_manager.o: system_manager.c costumio.h
 
 
 user_console: user_console.o costumio.o
-	$(CC) $(CFLAGS) $^ -o $@
+	$(CC) $(CFLAGS) -pthread $^ -o $@
 
 user_console.o: user_console.c costumio.h
 	$(CC) $(CFLAGS) -c user_console.c
