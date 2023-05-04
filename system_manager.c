@@ -6,12 +6,14 @@
 #include <unistd.h> // process
 #include <sys/shm.h> // shared memory
 #include <pthread.h> // thread
-#include "costumio.h"
 #include <time.h>
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <assert.h>
 #include <sys/msg.h>
+
+#include "costumio.h"
+#include "internal_queue.h"
 
 #define CONSOLE_PIPE "CONSOLE_PIPE"
 #define SENSOR_PIPE "SENSOR_PIPE"
@@ -28,6 +30,8 @@ typedef struct
     char alert_id[32], key[32];
     int alert_min, alert_max;
 } alert;
+
+
 
 pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
 pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
@@ -49,10 +53,13 @@ int console_pipe_id, sensor_pipe_id;
 int mq_id;
 FILE *log_file;
 
+InternalQueue *internal_queue_console;
+InternalQueue *internal_queue_sensor;
 
 key_data *data_base;
 alert *alert_list;
 char *sensor_list;
+int *workers_bitmap;
 
 time_t t;
 struct tm *time_info;
@@ -75,6 +82,7 @@ void worker_process(int worker_number){
     fprintf(log_file, "%s WORKER %d READY\n",temp, worker_number+1);
     pthread_mutex_unlock(&log_mutex);
 
+    workers_bitmap[worker_number] = 1; //1 - esta disponivel
 
     //user console messages -> stats; sensors; list_alerts
         //when read-only process tries to access shared memory
@@ -162,6 +170,15 @@ void *dispatcher(){
     printf("%s THREAD DISPATCHER CREATED\n", temp);
     fprintf(log_file, "%s THREAD DISPATCHER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
+
+
+    //dispatch the next message
+    //get next message
+    Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
+    //TODO: verificar se deu return da mensagem (caso esta funcao n fique a espera de nada)
+
+
+
     pthread_exit(NULL);
 
 }
@@ -214,14 +231,24 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]), IPC_CREAT|0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int), IPC_CREAT|0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
     data_base = (key_data*) shm_global;                                 //store data sent by sensors
     alert_list = (alert*) shm_global + MAX_KEYS * sizeof(key_data);     //store alerts
-    sensor_list = (char *)shm_global + MAX_ALERTS * sizeof(alert);      //store sensors
+    sensor_list = (char *) shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert);      //store sensors
+    workers_bitmap = (int *) shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]);
 
+    key_data *teste_data_base = malloc(sizeof(key_data));
+    alert *teste_alert_list = malloc(sizeof(alert));
+    char *teste_sensor_list = malloc(sizeof(char[32]));
+    int *teste_workers_bitmap = malloc(sizeof(int));
+
+    memcpy( data_base, teste_data_base, sizeof(key_data) );
+    memcpy( alert_list, teste_alert_list, sizeof(alert));
+    memcpy( sensor_list, teste_sensor_list, sizeof(char[32]));
+    memcpy( workers_bitmap, teste_workers_bitmap, sizeof(int));
 
     //creates log
     char log_name[] = "log.txt";
@@ -242,6 +269,10 @@ int main(int argc, char *argv[]) {
     }
 
 
+    //create internal queue
+    internal_queue_console = create_internal_queue_console();
+    internal_queue_sensor = create_internal_queue_console();
+
 
     //open/create msg queue
     if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
@@ -250,6 +281,7 @@ int main(int argc, char *argv[]) {
     }
 
 
+    //create unnamed pipes and send it to workers
     //creates WORKERS
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
