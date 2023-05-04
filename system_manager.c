@@ -236,19 +236,27 @@ int main(int argc, char *argv[]) {
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
     data_base = (key_data*) shm_global;                                 //store data sent by sensors
-    alert_list = (alert*) shm_global + MAX_KEYS * sizeof(key_data);     //store alerts
-    sensor_list = (char *) shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert);      //store sensors
-    workers_bitmap = (int *) shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]);
+    alert_list = (alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
+    sensor_list = (char *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert));      //store sensors
+    workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]));
 
+    //codigo para testar shm
+    /*
     key_data *teste_data_base = malloc(sizeof(key_data));
     alert *teste_alert_list = malloc(sizeof(alert));
     char *teste_sensor_list = malloc(sizeof(char[32]));
     int *teste_workers_bitmap = malloc(sizeof(int));
 
-    memcpy( data_base, teste_data_base, sizeof(key_data) );
-    memcpy( alert_list, teste_alert_list, sizeof(alert));
-    memcpy( sensor_list, teste_sensor_list, sizeof(char[32]));
-    memcpy( workers_bitmap, teste_workers_bitmap, sizeof(int));
+    int abc = 3;
+    teste_workers_bitmap = &abc;
+
+    memcpy(data_base + 1, teste_data_base, sizeof(key_data));
+    memcpy(alert_list, teste_alert_list, sizeof(alert));
+    memcpy(sensor_list, teste_sensor_list, sizeof(char[32]));
+    memcpy(&workers_bitmap[2], teste_workers_bitmap, sizeof(int));
+
+    printf("\n\nNUMERO NA SHM %d\n\n" , workers_bitmap[2]);
+    */
 
     //creates log
     char log_name[] = "log.txt";
@@ -270,8 +278,8 @@ int main(int argc, char *argv[]) {
 
 
     //create internal queue
-    internal_queue_console = create_internal_queue_console();
-    internal_queue_sensor = create_internal_queue_console();
+    internal_queue_console = create_internal_queue();
+    internal_queue_sensor = create_internal_queue();
 
 
     //open/create msg queue

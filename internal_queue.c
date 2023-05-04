@@ -66,4 +66,6 @@ Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* i
     else{
         //TODO: wait ate que haja novas mensagens ??
     }
+    Message m;
+    return m;
 }

@@ -7,6 +7,8 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <signal.h>
+#include <sys/msg.h>
+#include <unistd.h>
 #include "costumio.h"
 
 #define CONSOLE_PIPE "CONSOLE_PIPE"
@@ -30,9 +32,9 @@ void handler(){
     exit(0);
 }
 
-void read_console(){
+void *read_console(){
     while (1) {
-        msgrcv(mq_id, &msg, sizeof(message) - sizeof(long), id);
+        msgrcv(mq_id, &msg, sizeof(message) - sizeof(long), id, 0);
         printf("%s", msg.cmd);
     }
     pthread_exit(NULL);
@@ -66,8 +68,8 @@ int main(int argc, char *argv[]){
                 exit(-1); 
     }
 
-    id = pid();
-    pthread_create(console_reader, NULL, read_console, NULL);
+    id = getpid();
+    pthread_create(&console_reader, NULL, read_console, NULL);
 
     printf("Menu:\n"
            "- exit\n"

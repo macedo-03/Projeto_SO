@@ -37,7 +37,7 @@ int internal_queue_size; //soma dos size das duas queues
 //TODO: antes de chamar insert_internal_queue para inserir nova mensagem verificar internal_queue_size?
 // ou chama na mesma e ignora essa mensagem dentro desta funcao?
 
-InternalQueue* create_internal_queue_console();
+InternalQueue* create_internal_queue();
 void insert_internal_queue(InternalQueue *this_internal_queue, Message message_to_insert);
 Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* internal_queue_sensor);
 Message delete_node(InternalQueue* this_internal_queue);
