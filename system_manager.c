@@ -190,13 +190,10 @@ void *dispatcher(){
     fprintf(log_file, "%s THREAD DISPATCHER CREATED\n", temp);
     pthread_mutex_unlock(&log_mutex);
 
-
     //dispatch the next message
     //get next message
     Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
     //TODO: verificar se deu return da mensagem (caso esta funcao n fique a espera de nada)
-
-
 
     pthread_exit(NULL);
 
