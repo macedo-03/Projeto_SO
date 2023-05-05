@@ -18,10 +18,11 @@
 #define CONSOLE_PIPE "CONSOLE_PIPE"
 #define SENSOR_PIPE "SENSOR_PIPE"
 #define MQ_KEY 4444
+#define STR_SIZE 32
 
 typedef struct
 {
-    char key[32];
+    char key[STR_SIZE];
     int last_value, min_value, max_value,n_updates ;
     double average;
 } key_data;
@@ -29,7 +30,7 @@ typedef struct
 typedef struct
 {
     long user_console_id;
-    char alert_id[32], key[32];
+    char alert_id[STR_SIZE], key[STR_SIZE];
     int alert_min, alert_max;
 } alert;
 
@@ -87,6 +88,10 @@ void write_to_log(char *message_to_log){
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
+    char message_to_log[STR_SIZE];
+    sprintf(message_to_log, "WORKER %d READY", worker_number+1);
+    write_to_log(message_to_log);
+
 
     pthread_mutex_lock(&log_mutex);
     //write messages
