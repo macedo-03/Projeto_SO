@@ -254,9 +254,9 @@ int main(int argc, char *argv[]) {
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
-    data_base = (key_data*) shm_global;                                 //store data sent by sensors
+    data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
     alert_list = (alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
-    sensor_list = (char *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert));      //store sensors
+    sensor_list = (char *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert));      //store sensors //2semaforos
     workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]));
     keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
 
@@ -400,3 +400,34 @@ int main(int argc, char *argv[]) {
     cleaner();
     return 0;
 }
+
+
+//TODO: geral
+//signals
+//semaforos:
+    //mutex read/write internal queue
+    //semaforo workers (para dispatcher)
+    //semaforo number of messages (para dispatcher)
+
+
+    //sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+
+    //console reader - validacao de input
+    //console reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+
+
+
+
+//worker processing sensors
+//worker processing console
+//
+
+
+//TODO: Miguel
+//console/sensor reader -> internal queue
+//dispatcher forward messages to work
+
+
+
+//TODO: Zheeeee?
+//semaforos para shm
