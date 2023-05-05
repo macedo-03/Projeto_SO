@@ -77,6 +77,15 @@ void get_time(){
 //    printf("end timer\n");
 }
 
+void write_to_log(char *message_to_log){
+    pthread_mutex_lock(&log_mutex);
+    //write messages
+    get_time();
+    printf("%s %s\n", temp, message_to_log);
+    fprintf(log_file, "%s %s\n", temp, message_to_log);
+    pthread_mutex_unlock(&log_mutex);
+}
+
 void worker_process(int worker_number){ //void worker_process(int worker_number, int* from_dispatcher_pipe)
 
     pthread_mutex_lock(&log_mutex);
@@ -136,12 +145,8 @@ void alerts_watcher_process(){
 //        pthread_mutex_unlock(&reader_mutex);
 
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s PROCESS ALERTS_WATCHER CREATED\n", temp);
-    fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("PROCESS ALERTS_WATCHER CREATED");
+
 
     for (int j = 0; j < count_key_data; ++j) {
 
@@ -162,33 +167,22 @@ void alerts_watcher_process(){
 }
 
 void *sensor_reader(){
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD SENSOR_READER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD SENSOR_READER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD SENSOR_READER CREATE");
+
     pthread_exit(NULL);
 }
 
 void *console_reader(){
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD CONSOLE_READER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD CONSOLE_READER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD CONSOLE_READER CREATED");
+
+
     pthread_exit(NULL);
 }
 
 void *dispatcher(){
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD DISPATCHER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD DISPATCHER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD DISPATCHER CREATED");
+
 
     //dispatch the next message
     //get next message
@@ -284,6 +278,8 @@ int main(int argc, char *argv[]) {
     }
     else{
         time(&t);
+
+//        write_to_log("HOME_IOT SIMULATOR STARTING");
         pthread_mutex_lock(&log_mutex);
         //write messages
         get_time();
@@ -373,14 +369,8 @@ int main(int argc, char *argv[]) {
     pthread_create(&thread_dispatcher, NULL, dispatcher, NULL);
 
 
+    write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
 
-
-    pthread_mutex_lock(&log_mutex);
-    get_time();
-    printf("%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
-    fprintf(log_file, "%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
-//    fflush(log_file);
-    pthread_mutex_unlock(&log_mutex);
 
     //join threads
     pthread_join(thread_console_reader, NULL);
@@ -395,20 +385,9 @@ int main(int argc, char *argv[]) {
     shmdt(shm_global);
     shmctl(shmid, IPC_RMID, NULL);
 
-    pthread_mutex_lock(&log_mutex);
-    get_time();
-    printf("%s HOME_IOT SIMULATOR CLOSING\n", temp);
-    fprintf(log_file, "%s HOME_IOT SIMULATOR CLOSING\n", temp);
-//    fflush(log_file);
-    pthread_mutex_unlock(&log_mutex);
-
+    write_to_log("HOME_IOT SIMULATOR CLOSING");
     fclose(log_file);
 
     cleaner();
-
-
-
-
-
     return 0;
 }
