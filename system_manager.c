@@ -49,7 +49,7 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 int count_sensors, count_alerts, count_key_data;
-int i;
+int i, j;
 int shmid;
 int console_pipe_id, sensor_pipe_id;
 int **disp_work_pipe;
@@ -305,15 +305,18 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    //TODO: is this how it works??
-//    disp_work_pipe = malloc(N_WORKERS*sizeof(int)*2);
-//    for (int j = 0; j < N_WORKERS; ++j) {
-//        pipe(disp_work_pipe[j]);
-//    }
+
+    disp_work_pipe = malloc(N_WORKERS*sizeof(int*));
+    for (j = 0; j < N_WORKERS; ++j) {
+        disp_work_pipe[j] = malloc(2*sizeof(int));
+        pipe(disp_work_pipe[j]);
+        //TODO: protecao
+    }
 
 
     //create unnamed pipes and send it to workers
     //creates WORKERS
+    i=0;
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
         {
