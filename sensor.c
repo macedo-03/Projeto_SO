@@ -17,7 +17,7 @@ typedef struct
     long message_id;
     int type; // 0: pedido user, 1: dados sensor, 2: alerta
     char cmd[BUF_SIZE];
-} message;
+} Message;
 
 int main(int argc, char *argv[]){
 //        char sensor_id[], int interval, char key[],  int min, int max){
@@ -48,13 +48,13 @@ int main(int argc, char *argv[]){
     srand(getpid());
 
     //TODO: faz sentido o sensor usar a mesma struct? só se for por causa de uniformização
-    message m;
+    Message m;
     m.message_id = (long) id;
     m.type = 1;
     while(1){
         sprintf(m.cmd, "%d#%s#%d", id, argv[3], rand() % (max_value-min_value+1) + min_value);
         printf("%s\n", m.cmd);
-        write(pipe_id, &m, sizeof(message));
+        write(pipe_id, &m, sizeof(Message));
         sleep(time_interval);
     }
     return 0;

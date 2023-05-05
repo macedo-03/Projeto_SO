@@ -23,12 +23,12 @@ typedef struct
     long message_id;
     int type; // 0: pedido user, 1: dados sensor, 2: alerta
     char cmd[BUF_SIZE];
-} message;
+} Message;
 
 
 int pipe_id, mq_id, id, valido = 1;
 pthread_t mq_reader;
-message msg;
+Message msg;
 struct sigaction action;
 
 void handler(){
@@ -37,7 +37,7 @@ void handler(){
 
 void *read_msq(){
     while (1) {
-        msgrcv(mq_id, &msg, sizeof(message) - sizeof(long), id, 0);
+        msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0);
         printf("%s", msg.cmd);
     }
     pthread_exit(NULL);
@@ -50,8 +50,7 @@ int main(int argc, char *argv[]){
         exit(-1);
     }
     //TODO: ver questão do NULL como parametro desta função
-    else if(!convert_int(argv[1], NULL)){ // console id
-
+    else if((int) strlen(argv[1]) != 3 && !convert_int(argv[1], NULL)){ // console id
         printf("user_console {console id}\n");
         exit(-1);
     }
@@ -143,11 +142,11 @@ int main(int argc, char *argv[]){
         }
 
         if (valido) {
-            message m;
+            Message m;
             m.message_id = id;
             m.type = 0;
             strcpy(m.cmd, buf);
-            write(pipe_id, &m, sizeof(message));
+            write(pipe_id, &m, sizeof(Message));
         }
 
         fgets(buf, BUF_SIZE, stdin);

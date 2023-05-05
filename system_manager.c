@@ -77,8 +77,7 @@ void get_time(){
 //    printf("end timer\n");
 }
 
-void worker_process(int worker_number){ //void worker_process(int worker_number, int* from_dispatcher_pipe)
-
+void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     pthread_mutex_lock(&log_mutex);
     //write messages
     get_time(temp);
@@ -87,6 +86,10 @@ void worker_process(int worker_number){ //void worker_process(int worker_number,
     pthread_mutex_unlock(&log_mutex);
 
     workers_bitmap[worker_number] = 1; //1 - esta disponivel
+
+    //read instruction from dispatcher pipe
+    Message message_to_process;
+    read(from_dispatcher_pipe[1], &message_to_process, sizeof(Message));
 
     //user console messages -> stats; sensors; list_alerts
         //when read-only process tries to access shared memory
@@ -317,7 +320,7 @@ int main(int argc, char *argv[]) {
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
         {
-            worker_process(i);
+            //worker_process(i);
 //            worker_process(i, disp_work_pipe[i]);
             exit(0);
         }
