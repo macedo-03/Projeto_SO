@@ -49,7 +49,7 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 int count_sensors, count_alerts, count_key_data;
-int i;
+int i, j;
 int shmid;
 int console_pipe_id, sensor_pipe_id;
 int **disp_work_pipe;
@@ -77,7 +77,17 @@ void get_time(){
 //    printf("end timer\n");
 }
 
-void worker_process(int worker_number, int from_dispatcher_pipe[2]){
+void write_to_log(char *message_to_log){
+    pthread_mutex_lock(&log_mutex);
+    //write messages
+    get_time();
+    printf("%s %s\n", temp, message_to_log);
+    fprintf(log_file, "%s %s\n", temp, message_to_log);
+    pthread_mutex_unlock(&log_mutex);
+}
+
+void worker_process(int worker_number, int* from_dispatcher_pipe){
+
     pthread_mutex_lock(&log_mutex);
     //write messages
     get_time(temp);
@@ -139,12 +149,8 @@ void alerts_watcher_process(){
 //        pthread_mutex_unlock(&reader_mutex);
 
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s PROCESS ALERTS_WATCHER CREATED\n", temp);
-    fprintf(log_file, "%s PROCESS ALERTS_WATCHER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("PROCESS ALERTS_WATCHER CREATED");
+
 
     for (int j = 0; j < count_key_data; ++j) {
 
@@ -165,33 +171,22 @@ void alerts_watcher_process(){
 }
 
 void *sensor_reader(){
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD SENSOR_READER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD SENSOR_READER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD SENSOR_READER CREATE");
+
     pthread_exit(NULL);
 }
 
 void *console_reader(){
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD CONSOLE_READER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD CONSOLE_READER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD CONSOLE_READER CREATED");
+
+
     pthread_exit(NULL);
 }
 
 void *dispatcher(){
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time();
-    printf("%s THREAD DISPATCHER CREATED\n", temp);
-    fprintf(log_file, "%s THREAD DISPATCHER CREATED\n", temp);
-    pthread_mutex_unlock(&log_mutex);
+    write_to_log("THREAD DISPATCHER CREATED");
+
 
     //dispatch the next message
     //get next message
@@ -287,6 +282,8 @@ int main(int argc, char *argv[]) {
     }
     else{
         time(&t);
+
+//        write_to_log("HOME_IOT SIMULATOR STARTING");
         pthread_mutex_lock(&log_mutex);
         //write messages
         get_time();
@@ -308,15 +305,18 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    //TODO: is this how it works??
-//    disp_work_pipe = malloc(N_WORKERS*sizeof(int)*2);
-//    for (int j = 0; j < N_WORKERS; ++j) {
-//        pipe(disp_work_pipe[j]);
-//    }
+
+    disp_work_pipe = malloc(N_WORKERS*sizeof(int*));
+    for (j = 0; j < N_WORKERS; ++j) {
+        disp_work_pipe[j] = malloc(2*sizeof(int));
+        pipe(disp_work_pipe[j]);
+        //TODO: protecao
+    }
 
 
     //create unnamed pipes and send it to workers
     //creates WORKERS
+    i=0;
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
         {
@@ -373,14 +373,8 @@ int main(int argc, char *argv[]) {
     pthread_create(&thread_dispatcher, NULL, dispatcher, NULL);
 
 
+    write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
 
-
-    pthread_mutex_lock(&log_mutex);
-    get_time();
-    printf("%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
-    fprintf(log_file, "%s HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH\n", temp);
-//    fflush(log_file);
-    pthread_mutex_unlock(&log_mutex);
 
     //join threads
     pthread_join(thread_console_reader, NULL);
@@ -395,20 +389,9 @@ int main(int argc, char *argv[]) {
     shmdt(shm_global);
     shmctl(shmid, IPC_RMID, NULL);
 
-    pthread_mutex_lock(&log_mutex);
-    get_time();
-    printf("%s HOME_IOT SIMULATOR CLOSING\n", temp);
-    fprintf(log_file, "%s HOME_IOT SIMULATOR CLOSING\n", temp);
-//    fflush(log_file);
-    pthread_mutex_unlock(&log_mutex);
-
+    write_to_log("HOME_IOT SIMULATOR CLOSING");
     fclose(log_file);
 
     cleaner();
-
-
-
-
-
     return 0;
 }
