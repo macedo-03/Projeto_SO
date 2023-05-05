@@ -159,12 +159,7 @@ void alerts_watcher_process(){
             }
         }
     }
-
-
-
 }
-
-
 
 void *sensor_reader(){
     pthread_mutex_lock(&log_mutex);
