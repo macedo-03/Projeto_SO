@@ -86,7 +86,7 @@ void write_to_log(char *message_to_log){
     pthread_mutex_unlock(&log_mutex);
 }
 
-void worker_process(int worker_number, int* from_dispatcher_pipe){
+void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
     pthread_mutex_lock(&log_mutex);
     //write messages
