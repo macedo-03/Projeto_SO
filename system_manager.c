@@ -173,6 +173,10 @@ void alerts_watcher_process(){
 void *sensor_reader(){
     write_to_log("THREAD SENSOR_READER CREATE");
 
+    char message_from_sensor[STR_SIZE];
+    read(sensor_pipe_id, &message_from_sensor, STR_SIZE);
+
+
     pthread_exit(NULL);
 }
 
