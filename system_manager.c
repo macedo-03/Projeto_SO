@@ -21,6 +21,7 @@
 #define SENSOR_PIPE "SENSOR_PIPE"
 #define MQ_KEY 4444
 #define STR_SIZE 64
+#define BUF_SIZE 1024
 
 typedef struct
 {
@@ -45,6 +46,9 @@ pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_
 pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
 pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
 
+pthread_mutex_t internal_queue_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to internal queue
+
+
 pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
 
 pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
@@ -59,7 +63,8 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex;
+sem_t * sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex;
+sem_t internal_queue_count;
 
 InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
@@ -334,7 +339,7 @@ void *sensor_reader(){
 
     while(1){ //condicao dos pipes
         //read sensor string from pipe
-        read(console_pipe_id, sensor_info, sizeof(Message));
+        read(sensor_pipe_id, sensor_info, BUF_SIZE);
 
         sensor_message = malloc(sizeof(Message));
         sensor_message->type=1;
@@ -342,10 +347,12 @@ void *sensor_reader(){
         strcpy(sensor_message->cmd, sensor_info);
 
         //lock internal queue
+        pthread_mutex_lock(&internal_queue_mutex);
         //get_value of semaphore. if internal queue is full -> continue;
         //semaphore
         insert_internal_queue(internal_queue_sensor, sensor_message);
         //unlock internal queue
+        pthread_mutex_unlock(&internal_queue_mutex);
 
     }
 
@@ -404,11 +411,12 @@ void *dispatcher(){
 void cleaner(){
     pthread_mutex_destroy(&shm_update_mutex);
     pthread_mutex_destroy(&reader_mutex);
-    //pthread_mutex_destroy(&log_mutex);
     pthread_mutex_destroy(&sensors_counter_mutex);
     pthread_mutex_destroy(&alerts_counter_mutex);
 
     pthread_cond_destroy(&shm_alert_watcher_cv);
+    shmctl(shmid, IPC_RMID, NULL);
+
 }
 
 
@@ -459,29 +467,40 @@ int main(int argc, char *argv[]) {
     keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
 
     //cretes unamed semaphores to protect the shared memory
-    if (sem_init(&sem_data_base_reader, 1, 1) < 0) {
-        perror("semaphore initialization");
+    if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_data_base_writer, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_data_base_writer = sem_open("/sem_data_base_writer", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_alert_list, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_alert_list = sem_open("/sem_alert_list", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_sensor_list_reader, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_sensor_list_reader = sem_open("/sem_sensor_list_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_sensor_list_writer, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_sensor_list_writer = sem_open("/sem_sensor_list_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_workers_bitmap, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_workers_bitmap = sem_open("/sem_workers_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&sem_keys_bitmap, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((sem_keys_bitmap = sem_open("/sem_keys_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
         exit(-1);
-    }if (sem_init(&log_mutex, 1, 1) < 0) {
-        perror("semaphore initialization");
+    }
+    if ((log_mutex = sem_open("/log_mutex", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
+        exit(-1);
+    }
+    if (sem_init(&internal_queue_count, 0, 0) < 0) {
+        perror("unnamed semaphore initialization");
         exit(-1);
     }
     
