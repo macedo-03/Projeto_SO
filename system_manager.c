@@ -56,7 +56,7 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
-int count_sensors, count_alerts, count_key_data;
+
 int i, j, k; //iterators
 int shmid;
 int console_pipe_id, sensor_pipe_id;
@@ -75,6 +75,7 @@ Alert *alert_list;
 char **sensor_list;
 int *workers_bitmap;
 int *keys_bitmap;
+int *count_sensors, *count_alerts, *count_key_data;
 
 time_t t;
 struct tm *time_info;
@@ -132,8 +133,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             sscanf(message_to_process.cmd, "%s %s %d %d", alert_id, key, &min, &max);
             validated=1;
             //sincronizacao lock
-            if(count_alerts < MAX_ALERTS){
-                for (i = 0; i < count_alerts; ++i) {
+            if(*count_alerts < MAX_ALERTS){
+                for (i = 0; i < *count_alerts; ++i) {
                     if(strcmp(alert_list[i].alert_id, alert_id)==0){
                         validated=0;
                         break;
@@ -153,7 +154,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 strcpy(new_alert->alert_id, alert_id);
 
                 //TODO: encontrar espaco livre
-                memcpy(&alert_list[count_alerts++], new_alert, sizeof(Alert));
+                memcpy(&alert_list[*count_alerts++], new_alert, sizeof(Alert));
                 sprintf(feedback.cmd, "OK");
             }
             else{
@@ -169,7 +170,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         }
         else if(strcmp(main_cmd, "STATS")==0){
             //lock leitura
-            for (i = 0; i < count_key_data; ++i) {
+            for (i = 0; i < *count_key_data; ++i) {
                 sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value, data_base[i].min_value, data_base[i].max_value, data_base[i].average, data_base[i].n_updates);
                 //send feedback to msg queue
             }
@@ -177,21 +178,21 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         else if(strcmp(main_cmd, "RESET")==0){
             //lock escrita
             //apagar tudo em data_base
-            count_key_data=0; //is this enough?
+            *count_key_data=0; //is this enough?
             sprintf(feedback.cmd, "OK");
             //send feedback to msg queue
 
         }
         else if(strcmp(main_cmd, "LIST_ALERTS")==0){
             //lock leitura
-            for (i = 0; i < count_alerts; ++i) {
+            for (i = 0; i < *count_alerts; ++i) {
                 sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id,alert_list[i].key, alert_list[i].alert_min, alert_list[i].alert_max);
                 //send feedback to msg queue
             }
         }
         else if(strcmp(main_cmd, "SENSORS")==0){
             //lock leitura
-            for (i = 0; i < count_sensors; ++i) {
+            for (i = 0; i < *count_sensors; ++i) {
                 sprintf(feedback.cmd, "%s", sensor_list[i]);
                 //send feedback to msg queue
             }
@@ -214,17 +215,17 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         validated= new_key = new_sensor = 1;
 
         //lock escrita
-        for(i = 0; i < count_sensors; i++){
+        for(i = 0; i < *count_sensors; i++){
             if(strcmp(sensor_list[i], sensor_id)==0){
                 new_sensor = 0;
                 break;
             }
         }
-        if(new_sensor == 1 && count_sensors == MAX_SENSORS){
+        if(new_sensor == 1 && *count_sensors == MAX_SENSORS){
             validated = 0;
         }
 
-        for(i = 0; i < count_key_data && validated; i++){
+        for(i = 0; i < *count_key_data && validated; i++){
             if(strcmp(data_base[i].key, key)==0){
                 new_key = 0;
                 data_base[i].last_value = value;
@@ -236,18 +237,18 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             }
         }
         if(new_key == 1 && validated){
-            if(count_key_data < MAX_KEYS){
+            if(*count_key_data < MAX_KEYS){
                 key_data *new_key_data = malloc(sizeof(key_data));
                 strcpy(new_key_data->key, key);
                 new_key_data->last_value = new_key_data->min_value = new_key_data->max_value = value;
                 new_key_data->average = (double) value;
                 new_key_data->n_updates=1;
 
-                memcpy(&data_base[count_key_data], new_key_data ,sizeof(key_data));
+                memcpy(&data_base[*count_key_data], new_key_data ,sizeof(key_data));
             }
         }
         if(new_sensor == 1 && validated){
-            memcpy(sensor_list[count_sensors++],sensor_id, sizeof(char[STR_SIZE]));
+            memcpy(sensor_list[*count_sensors++],sensor_id, sizeof(char[STR_SIZE]));
         }
         else if(!validated){
             sprintf(message_to_log, "Sensor message discarded: %s", message_to_process.cmd);
@@ -308,11 +309,11 @@ void alerts_watcher_process(){
     write_to_log("PROCESS ALERTS_WATCHER CREATED");
 
 
-    for (j = 0; j < count_key_data; ++j) {
+    for (j = 0; j < *count_key_data; ++j) {
 
         if(keys_bitmap[j] == 1) { //aquela key foi atualizada
             keys_bitmap[j] = 0;
-            for (k = 0; k < count_alerts; ++k) {
+            for (k = 0; k < *count_alerts; ++k) {
                 if (alert_list[k].key == data_base[j].key && (data_base[j].last_value < alert_list[k].alert_min || data_base[j].last_value > alert_list[k].alert_max )) {
                     Message msg_to_send;
                     msg_to_send.type = 0;
@@ -466,7 +467,7 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int), IPC_CREAT | 0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 3 * sizeof(int), IPC_CREAT | 0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
@@ -475,6 +476,10 @@ int main(int argc, char *argv[]) {
     sensor_list = (char **) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
     workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]));
     keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
+    count_key_data = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + (N_WORKERS + MAX_KEYS)* sizeof(int));
+    count_alerts = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + (N_WORKERS + MAX_KEYS + 1)* sizeof(int));
+    count_sensors = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + (N_WORKERS + MAX_KEYS + 2)* sizeof(int));
+
 
     //cretes unamed semaphores to protect the shared memory
     if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {

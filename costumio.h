@@ -12,7 +12,7 @@
 #include <limits.h>
 #include <ctype.h>
 
-#define MY_MAX_INPUT 32
+#define MY_MAX_INPUT 33
 
 int my_atoi(char str[], int *int_number);
 int convert_int(char str[], int* number);

@@ -56,11 +56,11 @@ int input_str(char str[], int underscore){
     while (i<len){
         //adiciona o dígito à string "converting"
         if(underscore==1 && !(isalpha(str[i]) || isdigit(str[i]) || str[i] == '_')){
-            printf("1bosta: %c\n", str[i]);
+//            printf("1bosta: %c\n", str[i]);
             return 0;
         }
         else if(underscore==0 && !(isalpha(str[i]) || isdigit(str[i]))){
-            printf("0bosta: %c\n", str[i]);
+//            printf("0bosta: %c\n", str[i]);
             return 0;
         }
         str[i] = (char) toupper(str[i]);
