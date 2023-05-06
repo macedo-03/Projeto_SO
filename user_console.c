@@ -49,7 +49,7 @@ int main(int argc, char *argv[]){
         printf("user_console {console id}\n");
         exit(-1);
     }
-    //TODO: ver questão do NULL como parametro desta função
+    //TODO: ver questão do NULL como parametro desta função - SUPOSTAMENTE ESTA TRATADO
     else if((int) strlen(argv[1]) != 3 && !convert_int(argv[1], NULL)){ // console id
         printf("user_console {console id}\n");
         exit(-1);

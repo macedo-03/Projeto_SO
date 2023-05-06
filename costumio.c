@@ -34,7 +34,7 @@ int convert_int(char str[], int* number){
         if(!isdigit(str[i])) return 0;
         i++;
     }
-    if(!my_atoi(str, number)) return 0;
+    if(number!=NULL && !my_atoi(str, number)) return 0;
     return 1;
 }
 

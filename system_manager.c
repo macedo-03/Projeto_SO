@@ -32,7 +32,7 @@ typedef struct
     long user_console_id;
     char alert_id[STR_SIZE], key[STR_SIZE];
     int alert_min, alert_max;
-} alert;
+} Alert;
 
 
 
@@ -43,14 +43,14 @@ pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file acces
 pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
 pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
 
-pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //alert alert_watcher that the shm has been updated
+pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
 
 pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 int count_sensors, count_alerts, count_key_data;
-int i, j;
+int i, j, k; //iterators
 int shmid;
 int console_pipe_id, sensor_pipe_id;
 int **disp_work_pipe;
@@ -61,8 +61,8 @@ InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
 
 key_data *data_base;
-alert *alert_list;
-char *sensor_list;
+Alert *alert_list;
+char **sensor_list;
 int *workers_bitmap;
 int *keys_bitmap;
 
@@ -88,23 +88,153 @@ void write_to_log(char *message_to_log){
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
+    char alert_id[STR_SIZE], key[STR_SIZE], sensor_id[STR_SIZE];
+//    char str_min[16], str_max[16];
+    int min, max, value;
+    int validated, new_sensor, new_key;
+
+    Message feedback;
+    feedback.type=1;
+
     char message_to_log[STR_SIZE];
+    char main_cmd[STR_SIZE];
+
+    //while(1)
     sprintf(message_to_log, "WORKER %d READY", worker_number+1);
     write_to_log(message_to_log);
 
 
-    pthread_mutex_lock(&log_mutex);
-    //write messages
-    get_time(temp);
-    printf("%s WORKER %d READY\n", temp, worker_number+1);
-    fprintf(log_file, "%s WORKER %d READY\n",temp, worker_number+1);
-    pthread_mutex_unlock(&log_mutex);
 
     workers_bitmap[worker_number] = 1; //1 - esta disponivel
 
     //read instruction from dispatcher pipe
+
+
     Message message_to_process;
-    read(from_dispatcher_pipe[1], &message_to_process, sizeof(Message));
+    read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message));
+    feedback.message_id = message_to_process.message_id;
+
+
+    if(message_to_process.type == 0){//mensagem do user
+        sscanf(message_to_process.cmd , "%s", main_cmd);
+        if(strcmp(main_cmd, "ADD_ALERT")==0){
+            sscanf(message_to_process.cmd, "%s %s %d %d", alert_id, key, &min, &max);
+            validated=1;
+            //sincronizacao lock
+            if(count_alerts < MAX_ALERTS){
+                for (i = 0; i < count_alerts; ++i) {
+                    if(strcmp(alert_list[i].key, key)==0){
+                        validated=0;
+                        break;
+                    }
+                }
+            }
+            else{
+//                validated=0;
+            }
+
+            if (validated){
+                Alert *new_alert = malloc(sizeof(Alert));
+                new_alert->alert_min = min;
+                new_alert->alert_max = max;
+                new_alert->user_console_id = message_to_process.message_id;
+                strcpy(new_alert->key, key);
+                strcpy(new_alert->alert_id, alert_id);
+
+                //TODO: encontrar espaco livre
+                memcpy(&alert_list[count_alerts++], new_alert, sizeof(Alert));
+            }
+            //sincronizacao unlock
+
+        }
+        else if(strcmp(main_cmd, "REMOVE_ALERT")==0) {
+            sscanf(message_to_process.cmd, "%s", alert_id);
+            //bla bla bla we fucked
+        }
+        else if(strcmp(main_cmd, "STATS")==0){
+            //lock leitura
+            for (i = 0; i < count_key_data; ++i) {
+                sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value, data_base[i].min_value, data_base[i].max_value, data_base[i].average, data_base[i].n_updates);
+                //send feedback to msg queue
+            }
+        }
+        else if(strcmp(main_cmd, "RESET")==0){
+            //lock escrita
+            //apagar tudo em data_base
+            count_key_data=0; //is this enough?
+            strcpy(feedback.cmd, "OK");
+            //send feedback to msg queue
+
+        }
+        else if(strcmp(main_cmd, "LIST_ALERTS")==0){
+            //lock leitura
+            for (i = 0; i < count_alerts; ++i) {
+                sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id,alert_list[i].key, alert_list[i].alert_min, alert_list[i].alert_max);
+                //send feedback to msg queue
+            }
+        }
+        else if(strcmp(main_cmd, "SENSORS")==0){
+            //lock leitura
+            for (i = 0; i < count_sensors; ++i) {
+                sprintf(feedback.cmd, "%s", sensor_list[i]);
+                //send feedback to msg queue
+            }
+        }
+
+    }
+    else{ //mensagem sensor
+        //parse input
+        validated= new_key = new_sensor = 1;
+
+        //lock escrita
+        for(i = 0; i < count_sensors; i++){
+            if(strcmp(sensor_list[i], sensor_id)==0){
+                new_sensor = 0;
+                break;
+            }
+        }
+        if(new_sensor == 1 && count_sensors == MAX_SENSORS){
+            validated = 0;
+        }
+
+        for(i = 0; i < count_key_data && validated; i++){
+            if(strcmp(data_base[i].key, key)==0){
+                new_key = 0;
+                data_base[i].last_value = value;
+                data_base[i].average = (data_base[i].average * data_base[i].n_updates + value) / data_base[i].n_updates+1;
+                data_base[i].n_updates++;
+                if(value > data_base[i].max_value) data_base[i].max_value = value;
+                if(value < data_base[i].min_value) data_base[i].min_value = value;
+                break;
+            }
+        }
+        if(new_key == 1 && validated){
+            if(count_key_data < MAX_KEYS){
+                key_data *new_key_data = malloc(sizeof(key_data));
+                strcpy(new_key_data->key, key);
+                new_key_data->last_value = new_key_data->min_value = new_key_data->max_value = value;
+                new_key_data->average = (double) value;
+                new_key_data->n_updates=1;
+
+                memcpy(&data_base[count_key_data], new_key_data ,sizeof(key_data));
+            }
+        }
+        if(new_sensor == 1 && validated){
+            memcpy(sensor_list[count_sensors++],sensor_id, sizeof(char[STR_SIZE]));
+        }
+        else if(!validated){
+            //escrever mensagem de descarte no log
+        }
+
+
+
+
+
+
+    }
+
+
+
 
     //user console messages -> stats; sensors; list_alerts
         //when read-only process tries to access shared memory
@@ -157,16 +287,16 @@ void alerts_watcher_process(){
     write_to_log("PROCESS ALERTS_WATCHER CREATED");
 
 
-    for (int j = 0; j < count_key_data; ++j) {
+    for (j = 0; j < count_key_data; ++j) {
 
         if(keys_bitmap[j] == 1) { //aquela key foi atualizada
             keys_bitmap[j] = 0;
-            for (int k = 0; k < count_alerts; ++k) {
+            for (k = 0; k < count_alerts; ++k) {
                 if (alert_list[k].key == data_base[j].key && (data_base[j].last_value < alert_list[k].alert_min || data_base[j].last_value > alert_list[k].alert_max )) {
                     Message msg_to_send;
                     msg_to_send.type = 0;
                     msg_to_send.message_id = alert_list[k].user_console_id;
-                    sprintf(msg_to_send.cmd, "ALERT!! The alert '%s', related to the key '%s' was activated!\n",
+                    sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
                             alert_list[k].alert_id, alert_list[k].key);
                     //TODO: send message to message queue
                 }
@@ -177,10 +307,25 @@ void alerts_watcher_process(){
 
 void *sensor_reader(){
     write_to_log("THREAD SENSOR_READER CREATE");
+    Message *sensor_message;
+    char sensor_info[STR_SIZE];
 
-    //read from sensor pipe
-    char message_from_sensor[STR_SIZE];
-    read(sensor_pipe_id, &message_from_sensor, STR_SIZE);
+    while(1){ //condicao dos pipes
+        //read sensor string from pipe
+        read(console_pipe_id, sensor_info, sizeof(Message));
+
+        sensor_message = malloc(sizeof(Message));
+        sensor_message->type=1;
+        sensor_message->message_id = 0;
+        strcpy(sensor_message->cmd, sensor_info);
+
+        //lock internal queue
+        //get_value of semaphore. if internal queue is full -> continue;
+        //semaphore
+        insert_internal_queue(internal_queue_sensor, sensor_message);
+        //unlock internal queue
+
+    }
 
 
     pthread_exit(NULL);
@@ -188,10 +333,21 @@ void *sensor_reader(){
 
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
+    Message *console_message;
+    while (1){
+        //read Message struct from pipe
+        read(console_pipe_id, &console_message, sizeof(Message));
 
-    //read from user console
-    Message message_from_user;
-    read(console_pipe_id, &message_from_user, sizeof(Message)); 
+
+        //lock internal queue
+        //get_value of semaphore. if internal queue is full -> continue;
+        //semaphore
+        insert_internal_queue(internal_queue_console, console_message);
+        //unlock internal queue
+    }
+
+
+
     pthread_exit(NULL);
 }
 
@@ -199,11 +355,24 @@ void *dispatcher(){
 
     write_to_log("THREAD DISPATCHER CREATED");
 
+    while(1){
+        //prende pelo semaforo dos workers
+        //prende pelo semaforo da internal queue
 
+        //executa codigo em baixo
+        break; //TODO: TIRAR ESTE BREAK!!
+    }
     //dispatch the next message
     //get next message
     Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
-    //TODO: verificar se deu return da mensagem (caso esta funcao n fique a espera de nada)
+    for (i = 0; i < N_WORKERS; ++i) {
+        if(workers_bitmap[i] == 1){
+            workers_bitmap[i] = 0; //mark worker as busy
+            write(disp_work_pipe[i][1], &message_to_dispatch, sizeof(Message));
+            break;
+        }
+    }
+
 
     pthread_exit(NULL);
 
@@ -257,20 +426,27 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int), IPC_CREAT|0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int), IPC_CREAT | 0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
     data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
-    alert_list = (alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
-    sensor_list = (char *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert));      //store sensors //2semaforos
-    workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]));
-    keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
+    alert_list = (Alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
+    sensor_list = (char **) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
+    workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]));
+    keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
+
+    for (i = 0; i < N_WORKERS; ++i) {
+        workers_bitmap[i] = 0;
+    }
+    for (i = 0; i < MAX_KEYS; ++i) {
+        keys_bitmap[i] = 0;
+    }
 
     //codigo para testar shm
     /*
     key_data *teste_data_base = malloc(sizeof(key_data));
-    alert *teste_alert_list = malloc(sizeof(alert));
+    Alert *teste_alert_list = malloc(sizeof(Alert));
     char *teste_sensor_list = malloc(sizeof(char[32]));
     int *teste_workers_bitmap = malloc(sizeof(int));
 
@@ -278,7 +454,7 @@ int main(int argc, char *argv[]) {
     teste_workers_bitmap = &abc;
 
     memcpy(data_base + 1, teste_data_base, sizeof(key_data));
-    memcpy(alert_list, teste_alert_list, sizeof(alert));
+    memcpy(alert_list, teste_alert_list, sizeof(Alert));
     memcpy(sensor_list, teste_sensor_list, sizeof(char[32]));
     memcpy(&workers_bitmap[2], teste_workers_bitmap, sizeof(int));
 
@@ -313,15 +489,20 @@ int main(int argc, char *argv[]) {
 
     //open/create msg queue
     if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
-        perror("Cannot open or create message queue");
+        perror("Cannot open or create message queue\n");
         exit(-1);
     }
 
 
+    //create one unnamed pipe for each worker
     disp_work_pipe = malloc(N_WORKERS*sizeof(int*));
     for (j = 0; j < N_WORKERS; ++j) {
         disp_work_pipe[j] = malloc(2*sizeof(int));
-        pipe(disp_work_pipe[j]);
+        if(pipe(disp_work_pipe[j]) == -1){
+            perror("Cannot create unnamed pipe\n");
+            exit(-1);
+        }
+
         //TODO: protecao
     }
 
@@ -423,16 +604,19 @@ int main(int argc, char *argv[]) {
     //console reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
 
 
-
-
 //worker processing sensors
 //worker processing console
-//
+
+//remove alerts. HOW?
+
+//alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
+
+//cuidado com os iteradores globais dentro das threads
 
 
 //TODO: Miguel
-//console/sensor reader -> internal queue
-//dispatcher forward messages to work
+//console/sensor reader -> internal queue //falta sincronizacao
+//dispatcher forward messages to work //falta sincronizacao
 
 
 

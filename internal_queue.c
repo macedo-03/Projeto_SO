@@ -16,11 +16,11 @@ InternalQueue* create_internal_queue(){
 
 
 //funcao que adiciona uma nova mensagem a internal queue
-void insert_internal_queue(InternalQueue *this_internal_queue, Message message_to_insert){
+void insert_internal_queue(InternalQueue *this_internal_queue, Message *message_to_insert){
     NoInternalQueue *new_message = malloc(sizeof(NoInternalQueue));
 
     if(new_message){
-        new_message->message = message_to_insert;
+        new_message->message = *message_to_insert;
         new_message->next = NULL;
 
         //lista vazia
