@@ -39,7 +39,7 @@ typedef struct
 
 pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
 pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
-pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
+//pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
 
 pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
 pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
@@ -58,7 +58,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t* sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap;
+sem_t* log_mutex, sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap;
 
 InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
@@ -82,12 +82,12 @@ void get_time(){
 }
 
 void write_to_log(char *message_to_log){
-    pthread_mutex_lock(&log_mutex);
+    sem_wait(log_mutex);
     //write messages
     get_time();
     printf("%s %s\n", temp, message_to_log);
     fprintf(log_file, "%s %s\n", temp, message_to_log);
-    pthread_mutex_unlock(&log_mutex);
+    sem_post(log_mutex);
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
@@ -385,7 +385,7 @@ void *dispatcher(){
 void cleaner(){
     pthread_mutex_destroy(&shm_update_mutex);
     pthread_mutex_destroy(&reader_mutex);
-    pthread_mutex_destroy(&log_mutex);
+    //pthread_mutex_destroy(&log_mutex);
     pthread_mutex_destroy(&sensors_counter_mutex);
     pthread_mutex_destroy(&alerts_counter_mutex);
 
@@ -461,6 +461,9 @@ int main(int argc, char *argv[]) {
     }if (sem_init(sem_keys_bitmap, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
+    }if (sem_init(log_mutex, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
     }
     
     for (i = 0; i < N_WORKERS; ++i) {
@@ -499,13 +502,13 @@ int main(int argc, char *argv[]) {
         time(&t);
 
 //        write_to_log("HOME_IOT SIMULATOR STARTING");
-        pthread_mutex_lock(&log_mutex);
+        sem_wait(log_mutex);
         //write messages
         get_time();
         printf("%s HOME_IOT SIMULATOR STARTING\n", temp);
         fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR STARTING\n", temp);
         fflush(log_file);
-        pthread_mutex_unlock(&log_mutex);
+        sem_post(log_mutex);
     }
 
 
@@ -640,6 +643,7 @@ int main(int argc, char *argv[]) {
 
 //cuidado com os iteradores globais dentro das threads
 
+//cleanup dos semaforos
 
 //TODO: Miguel
 //console/sensor reader -> internal queue //falta sincronizacao
@@ -648,4 +652,3 @@ int main(int argc, char *argv[]) {
 
 
 //TODO: Zheeeee?
-//semaforos para shm
