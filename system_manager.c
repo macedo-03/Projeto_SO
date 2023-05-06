@@ -255,14 +255,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         }
 
 
-
-
-
-
     }
 
-
-
+    sem_post(sem_free_worker_count);
 
     //user console messages -> stats; sensors; list_alerts
         //when read-only process tries to access shared memory
@@ -292,9 +287,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 //    fprintf(log_file, "Insert message here");
 //    pthread_mutex_unlock(&log_mutex);
 
-
-
-}
+} //worker_process
 
 void alerts_watcher_process(){
 
@@ -331,7 +324,7 @@ void alerts_watcher_process(){
             }
         }
     }
-}
+} //alerts_watcher_process
 
 void *sensor_reader(){
     write_to_log("THREAD SENSOR_READER CREATE");
@@ -364,7 +357,7 @@ void *sensor_reader(){
 
 
     pthread_exit(NULL);
-}
+} // sensor_reader
 
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
@@ -374,6 +367,7 @@ void *console_reader(){
     while (1){
         //read Message struct from pipe
         read(console_pipe_id, &console_message, sizeof(Message));
+
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
         //get_value of semaphore. if internal queue is full -> continue;
@@ -387,7 +381,7 @@ void *console_reader(){
         pthread_mutex_unlock(&internal_queue_mutex);
     }
     pthread_exit(NULL);
-}
+} //console_reader
 
 void *dispatcher(){
 
@@ -681,28 +675,28 @@ int main(int argc, char *argv[]) {
 //TODO: geral
 //signals
 //semaforos:
-    //mutex read/write internal queue
-    //semaforo workers (para dispatcher)
-    //semaforo number of messages (para dispatcher)
+    //DONE - mutex read/write internal queue
+    //DONE - semaforo workers (para dispatcher)
+    //DONE - semaforo number of messages (para dispatcher)
 
 
-    //sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+    //QUASE DONE - sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
 
     //console reader - validacao de input
-    //console reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+    //QUASE DONE - console reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
 
 
 //worker processing sensors
 //worker processing console
 
-//remove alerts. HOW?
+//remove alerts. HOW? Maybe RC style
 
-//alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
+//REMOVI OS WARNINGS - alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
 
 //cuidado com os iteradores globais dentro das threads
 
 //cleanup dos semaforos
-//quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
+//DONE - quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
 
 //TODO: Miguel
 //console/sensor reader -> internal queue //falta sincronizacao
