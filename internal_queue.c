@@ -56,16 +56,14 @@ Message delete_node(InternalQueue* this_internal_queue){
 }
 
 Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* internal_queue_sensor){
-
-    if(internal_queue_console->size>0){
-        return delete_node(internal_queue_console);
-    }
-    else if(internal_queue_sensor->size>0){
-        return delete_node(internal_queue_sensor);
-    }
-    else{
-        //TODO: wait ate que haja novas mensagens ??
-    }
     Message m;
+    if(internal_queue_console->size>0){
+        m = delete_node(internal_queue_console);
+    }
+    else //if(internal_queue_sensor->size>0){
+    {
+        m =  delete_node(internal_queue_sensor);
+    }
+    printf("message to dispatch: %s\n", m.cmd);
     return m;
 }

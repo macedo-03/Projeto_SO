@@ -16,12 +16,12 @@
 
 #define CONSOLE_PIPE "CONSOLE_PIPE"
 #define MQ_KEY 4444
-#define BUF_SIZE 1024
+#define BUF_SIZE 256
 
 typedef struct
 {
     long message_id;
-    int type; // 0: pedido user, 1: dados sensor, 2: alerta
+    int type; //0 - origem:user; 1 - origem:sensor
     char cmd[BUF_SIZE];
 } Message;
 
@@ -145,6 +145,8 @@ int main(int argc, char *argv[]){
             Message m;
             m.message_id = id;
             m.type = 0;
+            printf("buf: %s\n", buf);
+            buf[strlen(buf)-1] = '\0';
             strcpy(m.cmd, buf);
             write(pipe_id, &m, sizeof(Message));
         }

@@ -40,24 +40,24 @@ typedef struct
 
 
 
-pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
-pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
-//pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
-
-pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
-pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
+//pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
+//pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
+////pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
+//
+//pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
+//pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
 
 pthread_mutex_t internal_queue_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to internal queue
 
-
-pthread_cond_t shm_alert_watcher_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
+pthread_mutex_t int_queue_size_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable internal_queue_size -> no read or write
+pthread_cond_t new_message_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
 
 pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 
-int i, j, k; //iterators
+
 int shmid;
 int console_pipe_id, sensor_pipe_id;
 int **disp_work_pipe;
@@ -99,6 +99,7 @@ void write_to_log(char *message_to_log){
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
+    int i, j;
     char alert_id[STR_SIZE], key[STR_SIZE], sensor_id[STR_SIZE];
 //    char str_min[16], str_max[16];
     int min, max, value;
@@ -109,6 +110,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
     char message_to_log[BUF_SIZE];
     char main_cmd[STR_SIZE];
+
+
 
     //while(1)
     sprintf(message_to_log, "WORKER %d READY", worker_number+1);
@@ -309,7 +312,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 } //worker_process
 
 void alerts_watcher_process(){
-
+    int j, k;
     //when read-only process tries to access shared memory
 //        pthread_mutex_lock(&reader_mutex);
 //        n_readers++;
@@ -354,7 +357,7 @@ void *sensor_reader(){
     while(1){ //condicao dos pipes
         //read sensor string from pipe
         read(sensor_pipe_id, sensor_info, STR_SIZE);
-
+        printf("%s\n", sensor_info);
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
         sensor_message.message_id = 0;
@@ -365,9 +368,11 @@ void *sensor_reader(){
         //get_value of semaphore. if internal queue is full -> continue;
         sem_getvalue(&internal_queue_count, &sem_value);
         //semaphore
-        if (sem_value < QUEUE_SZ){
-            sem_post(&internal_queue_count);
+        if (internal_queue_size < QUEUE_SZ){
+//            sem_post(&internal_queue_count);
             insert_internal_queue(internal_queue_sensor, &sensor_message);
+            pthread_cond_signal(&new_message_cv);
+            printf("sensor message to queue\n");
         }
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
@@ -381,20 +386,24 @@ void *sensor_reader(){
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
     Message console_message;
-    int sem_value;
+    int bytes_read;
 
     while (1){
         //read Message struct from pipe
-        read(console_pipe_id, &console_message, sizeof(Message));
-
+        bytes_read = read(console_pipe_id, &console_message, sizeof(Message)); //TODO: verificar return read
+        printf("bytes: %d\tmessage received: %s\n", bytes_read, console_message.cmd);
         //lock internal queue
-        pthread_mutex_lock(&internal_queue_mutex);
+        pthread_mutex_lock(&internal_queue_mutex);;
         //get_value of semaphore. if internal queue is full -> continue;
-        sem_getvalue(&internal_queue_count, &sem_value);
-        //semaphore
-        if (sem_value < QUEUE_SZ){
-            sem_post(&internal_queue_count);
+//        sem_getvalue(&internal_queue_count, &sem_value);
+//        //semaphore
+//        printf("sem_value: %d\tMax: %d", sem_value, QUEUE_SZ);
+        if (internal_queue_size < QUEUE_SZ){
+//            sem_post(&internal_queue_count);
             insert_internal_queue(internal_queue_console, &console_message);
+            printf("console message to queue\n");
+            pthread_cond_signal(&new_message_cv);
+
         }
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
@@ -403,33 +412,45 @@ void *console_reader(){
 } //console_reader
 
 void *dispatcher(){
+    int k;
 
     write_to_log("THREAD DISPATCHER CREATED");
-    printf("THREAD DISPATCHER CREATED");
+
 
     while(1){
+        pthread_mutex_lock(&int_queue_size_mutex);
+        while(internal_queue_size==0){
+            pthread_cond_wait(&new_message_cv, &int_queue_size_mutex);
+        }
+
+        pthread_mutex_unlock(&int_queue_size_mutex);
+
         //prende pelo semaforo dos workers
         sem_wait(sem_free_worker_count);
+
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
-        //prende pelo semaforo da internal queue
-        sem_wait(&internal_queue_count);
+//        //prende pelo semaforo da internal queue
+//        sem_wait(&internal_queue_count);
         //executa codigo em baixo
+        printf("internal queue size before = %d\n", internal_queue_size);
+        Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
+        printf("internal queue size after = %d\n", internal_queue_size);
+        for (k = 0; k < N_WORKERS; ++k) {
+            if(workers_bitmap[k] == 1){
+                workers_bitmap[k] = 0; //mark worker as busy
+                write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
+                printf("Message dispatched: %s\t worker: %d\n", message_to_dispatch.cmd, k+1);
+                break;
+            }
+        }
 
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
-        break; //TODO: TIRAR ESTE BREAK!!
     }
     //dispatch the next message
     //get next message
-    Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
-    for (k = 0; k < N_WORKERS; ++k) {
-        if(workers_bitmap[k] == 1){
-            workers_bitmap[k] = 0; //mark worker as busy
-            write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
-            break;
-        }
-    }
+
 
 
     pthread_exit(NULL);
@@ -438,10 +459,10 @@ void *dispatcher(){
 
 
 void cleaner(){
-    pthread_mutex_destroy(&shm_update_mutex);
-    pthread_mutex_destroy(&reader_mutex);
-    pthread_mutex_destroy(&sensors_counter_mutex);
-    pthread_mutex_destroy(&alerts_counter_mutex);
+//    pthread_mutex_destroy(&shm_update_mutex);
+//    pthread_mutex_destroy(&reader_mutex);
+//    pthread_mutex_destroy(&sensors_counter_mutex);
+//    pthread_mutex_destroy(&alerts_counter_mutex);
 
     sem_close(sem_data_base_reader); sem_unlink("/sem_data_base_reader");
     sem_close(sem_data_base_writer); sem_unlink("/sem_data_base_writer");
@@ -455,13 +476,14 @@ void cleaner(){
 
     sem_destroy(&internal_queue_count); //TODO: mantemos isto? deprecated
 
-    pthread_cond_destroy(&shm_alert_watcher_cv);
+//    pthread_cond_destroy(&shm_alert_watcher_cv);
     shmctl(shmid, IPC_RMID, NULL);
 
 }
 
 
 int main(int argc, char *argv[]) {
+    int i, j;
     if (argc != 2) {
         printf("erro\nhome_iot {configuration file}\n");
         exit(-1);
@@ -637,8 +659,7 @@ int main(int argc, char *argv[]) {
     while (i < N_WORKERS){
         if ((childpid = fork()) == 0)
         {
-            //worker_process(i);
-//            worker_process(i, disp_work_pipe[i]);
+            worker_process(i, disp_work_pipe[i]);
             exit(0);
         }
         else if (childpid == -1)
@@ -746,5 +767,8 @@ int main(int argc, char *argv[]) {
 //dispatcher forward messages to work //falta sincronizacao
 //DONE - cleanup dos semaforos
 
+//trocar unnamed semaphore para variavel de condicao
+//trocar iteradores
+//
 
 //TODO: Zheeeee?
