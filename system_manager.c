@@ -63,7 +63,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t * sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex;
+sem_t * sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex, sem_free_worker_count;
 sem_t internal_queue_count;
 
 InternalQueue *internal_queue_console;
@@ -334,23 +334,28 @@ void alerts_watcher_process(){
 
 void *sensor_reader(){
     write_to_log("THREAD SENSOR_READER CREATE");
-    Message *sensor_message;
+    Message sensor_message;
     char sensor_info[STR_SIZE];
+    int sem_value;
 
     while(1){ //condicao dos pipes
         //read sensor string from pipe
         read(sensor_pipe_id, sensor_info, BUF_SIZE);
 
-        sensor_message = malloc(sizeof(Message));
-        sensor_message->type=1;
-        sensor_message->message_id = 0;
-        strcpy(sensor_message->cmd, sensor_info);
+        //sensor_message = malloc(sizeof(Message));
+        sensor_message.type=1;
+        sensor_message.message_id = 0;
+        strcpy(sensor_message.cmd, sensor_info);
 
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
         //get_value of semaphore. if internal queue is full -> continue;
+        sem_getvalue(&internal_queue_count, &sem_value);
         //semaphore
-        insert_internal_queue(internal_queue_sensor, sensor_message);
+        if (sem_value < QUEUE_SZ){
+            sem_post(&internal_queue_count);
+            insert_internal_queue(internal_queue_sensor, &sensor_message);
+        }
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
 
@@ -362,21 +367,24 @@ void *sensor_reader(){
 
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
-    Message *console_message;
+    Message console_message;
+    int sem_value;
+
     while (1){
         //read Message struct from pipe
         read(console_pipe_id, &console_message, sizeof(Message));
-
-
         //lock internal queue
+        pthread_mutex_lock(&internal_queue_mutex);
         //get_value of semaphore. if internal queue is full -> continue;
+        sem_getvalue(&internal_queue_count, &sem_value);
         //semaphore
-        insert_internal_queue(internal_queue_console, console_message);
+        if (sem_value < QUEUE_SZ){
+            sem_post(&internal_queue_count);
+            insert_internal_queue(internal_queue_console, &console_message);
+        }
         //unlock internal queue
+        pthread_mutex_unlock(&internal_queue_mutex);
     }
-
-
-
     pthread_exit(NULL);
 }
 
@@ -386,9 +394,15 @@ void *dispatcher(){
 
     while(1){
         //prende pelo semaforo dos workers
+        sem_wait(sem_free_worker_count);
+        //lock internal queue
+        pthread_mutex_lock(&internal_queue_mutex);
         //prende pelo semaforo da internal queue
-
+        sem_wait(&internal_queue_count);
         //executa codigo em baixo
+
+        //unlock internal queue
+        pthread_mutex_unlock(&internal_queue_mutex);
         break; //TODO: TIRAR ESTE BREAK!!
     }
     //dispatch the next message
@@ -496,6 +510,10 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
     if ((log_mutex = sem_open("/log_mutex", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
+        exit(-1);
+    }
+    if ((sem_free_worker_count = sem_open("/sem_free_worker_count", O_CREAT | O_EXCL, 0777, N_WORKERS)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
@@ -682,6 +700,7 @@ int main(int argc, char *argv[]) {
 //cuidado com os iteradores globais dentro das threads
 
 //cleanup dos semaforos
+//quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
 
 //TODO: Miguel
 //console/sensor reader -> internal queue //falta sincronizacao
