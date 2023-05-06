@@ -12,6 +12,7 @@
 #include <assert.h>
 #include <semaphore.h>
 #include <sys/msg.h>
+#include <sys/wait.h>
 #include <string.h>
 
 #include "costumio.h"
@@ -63,7 +64,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t * sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex, sem_free_worker_count;
+sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count;
 sem_t internal_queue_count;
 
 InternalQueue *internal_queue_console;
@@ -88,12 +89,12 @@ void get_time(){
 }
 
 void write_to_log(char *message_to_log){
-    sem_wait(&log_mutex);
+    sem_wait(log_mutex);
     //write messages
     get_time();
     printf("%s %s\n", temp, message_to_log);
     fprintf(log_file, "%s %s\n", temp, message_to_log);
-    sem_post(&log_mutex);
+    sem_post(log_mutex);
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
@@ -105,7 +106,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     Message feedback;
     feedback.type=1;
 
-    char message_to_log[STR_SIZE];
+    char message_to_log[BUF_SIZE];
     char main_cmd[STR_SIZE];
 
     //while(1)
@@ -340,7 +341,7 @@ void *sensor_reader(){
 
     while(1){ //condicao dos pipes
         //read sensor string from pipe
-        read(sensor_pipe_id, sensor_info, BUF_SIZE);
+        read(sensor_pipe_id, sensor_info, STR_SIZE);
 
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
@@ -391,6 +392,7 @@ void *console_reader(){
 void *dispatcher(){
 
     write_to_log("THREAD DISPATCHER CREATED");
+    printf("THREAD DISPATCHER CREATED");
 
     while(1){
         //prende pelo semaforo dos workers
@@ -558,13 +560,13 @@ int main(int argc, char *argv[]) {
         time(&t);
 
 //        write_to_log("HOME_IOT SIMULATOR STARTING");
-        sem_wait(&log_mutex);
+        sem_wait(log_mutex);
         //write messages
         get_time();
         printf("%s HOME_IOT SIMULATOR STARTING\n", temp);
         fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR STARTING\n", temp);
         fflush(log_file);
-        sem_post(&log_mutex);
+        sem_post(log_mutex);
     }
 
 

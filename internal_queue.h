@@ -12,7 +12,7 @@ typedef struct
 {
     long message_id;
     int type; //0 - origem:user; 1 - origem:sensor
-    char cmd[64];
+    char cmd[256];
 } Message;
 
 
