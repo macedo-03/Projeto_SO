@@ -118,10 +118,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
     workers_bitmap[worker_number] = 1; //1 - esta disponivel
 
-    //read instruction from dispatcher pipe
-
 
     Message message_to_process;
+    //read instruction from dispatcher pipe
     read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message));
     feedback.message_id = message_to_process.message_id;
 
@@ -153,7 +152,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 strcpy(new_alert->key, key);
                 strcpy(new_alert->alert_id, alert_id);
 
-                //TODO: encontrar espaco livre
+                //TODO: encontrar espaco livre - a partida esta resolvido
                 memcpy(&alert_list[*count_alerts++], new_alert, sizeof(Alert));
                 sprintf(feedback.cmd, "OK");
             }
@@ -165,6 +164,22 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         }
         else if(strcmp(main_cmd, "REMOVE_ALERT")==0) {
             sscanf(message_to_process.cmd, "%s", alert_id);
+            validated=1;
+            for (i = 0; i < *count_alerts; ++i) {
+                if(strcmp(alert_list[i].alert_id, alert_id)==0){
+                    for (j = i+1; j < *count_alerts ; j++) {
+                        alert_id[j-1] = alert_id[j];
+                    }
+                    validated = 0;
+                    *count_alerts-=1;
+                    break;
+                }
+            }
+            if(!validated){
+                sprintf(feedback.cmd, "ERROR");
+            }
+
+
             //bla bla bla we fucked
             sprintf(feedback.cmd, "OK");
         }
@@ -177,10 +192,11 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         }
         else if(strcmp(main_cmd, "RESET")==0){
             //lock escrita
-            //apagar tudo em data_base
-            *count_key_data=0; //is this enough?
+            //clean every stats in the data base
+            *count_key_data=0; //TODO: is this enough?
             sprintf(feedback.cmd, "OK");
             //send feedback to msg queue
+
 
         }
         else if(strcmp(main_cmd, "LIST_ALERTS")==0){
@@ -212,7 +228,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         my_atoi(token, &value);
 
 
-        validated= new_key = new_sensor = 1;
+        validated = new_key = new_sensor = 1; //1 - true
 
         //lock escrita
         for(i = 0; i < *count_sensors; i++){
@@ -226,7 +242,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         }
 
         for(i = 0; i < *count_key_data && validated; i++){
-            if(strcmp(data_base[i].key, key)==0){
+            if(strcmp(data_base[i].key, key)==0){ //update key
                 new_key = 0;
                 data_base[i].last_value = value;
                 data_base[i].average = (data_base[i].average * data_base[i].n_updates + value) / data_base[i].n_updates+1;
@@ -236,7 +252,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 break;
             }
         }
-        if(new_key == 1 && validated){
+        if(new_key == 1 && validated){ //create key
             if(*count_key_data < MAX_KEYS){
                 key_data *new_key_data = malloc(sizeof(key_data));
                 strcpy(new_key_data->key, key);
@@ -259,6 +275,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     }
 
     sem_post(sem_free_worker_count);
+
+    //fim while
 
     //user console messages -> stats; sensors; list_alerts
         //when read-only process tries to access shared memory
@@ -405,10 +423,10 @@ void *dispatcher(){
     //dispatch the next message
     //get next message
     Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
-    for (i = 0; i < N_WORKERS; ++i) {
-        if(workers_bitmap[i] == 1){
-            workers_bitmap[i] = 0; //mark worker as busy
-            write(disp_work_pipe[i][1], &message_to_dispatch, sizeof(Message));
+    for (k = 0; k < N_WORKERS; ++k) {
+        if(workers_bitmap[k] == 1){
+            workers_bitmap[k] = 0; //mark worker as busy
+            write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
             break;
         }
     }
@@ -589,8 +607,6 @@ int main(int argc, char *argv[]) {
             perror("Cannot create unnamed pipe\n");
             exit(-1);
         }
-
-        //TODO: protecao
     }
 
 
@@ -685,18 +701,19 @@ int main(int argc, char *argv[]) {
     //DONE - semaforo number of messages (para dispatcher)
 
 
-    //QUASE DONE - sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+    //QUASE DONE - sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value))
 
     //console reader - validacao de input
-    //QUASE DONE - console reader - descartar mensagens (qnd a internal queue esta cheia (get_value)) ou quando nao cumpre todos os requesitos)
+    //QUASE DONE - console reader - descartar mensagens (qnd a internal queue esta cheia (get_value))
 
 
-//worker processing sensors
-//worker processing console
+//worker processing sensors, descartar mensagens quando nao cumpre todos os requesitos - thinks it's done
+//worker processing console, descartar mensagens ou quando nao cumpre todos os requesitos -
 
-//remove alerts. HOW? Maybe RC style
+//remove alerts. HOW? Maybe RC style - DONE
 
 //REMOVI OS WARNINGS - alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
+//QUAIS WARNINGS?
 
 //cuidado com os iteradores globais dentro das threads
 
