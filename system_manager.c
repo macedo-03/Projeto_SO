@@ -10,6 +10,7 @@
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <assert.h>
+#include <semaphore.h>
 #include <sys/msg.h>
 
 #include "costumio.h"
@@ -56,6 +57,8 @@ int console_pipe_id, sensor_pipe_id;
 int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
+
+sem_t* sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap;
 
 InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
@@ -436,6 +439,30 @@ int main(int argc, char *argv[]) {
     workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]));
     keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
 
+    //cretes unamed semaphores to protect the shared memory
+    if (sem_init(sem_data_base_reader, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_data_base_writer, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_alert_list, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_sensor_list_reader, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_sensor_list_writer, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_workers_bitmap, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }if (sem_init(sem_keys_bitmap, 1, 1) < 0) {
+        perror("semaphore initialization");
+        exit(-1);
+    }
+    
     for (i = 0; i < N_WORKERS; ++i) {
         workers_bitmap[i] = 0;
     }
