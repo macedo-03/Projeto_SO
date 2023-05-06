@@ -20,7 +20,7 @@
 #define CONSOLE_PIPE "CONSOLE_PIPE"
 #define SENSOR_PIPE "SENSOR_PIPE"
 #define MQ_KEY 4444
-#define STR_SIZE 32
+#define STR_SIZE 64
 
 typedef struct
 {
@@ -59,7 +59,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t* log_mutex, sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap;
+sem_t sem_data_base_reader, sem_data_base_writer, sem_alert_list, sem_sensor_list_reader, sem_sensor_list_writer, sem_workers_bitmap, sem_keys_bitmap, log_mutex;
 
 InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
@@ -83,12 +83,12 @@ void get_time(){
 }
 
 void write_to_log(char *message_to_log){
-    sem_wait(log_mutex);
+    sem_wait(&log_mutex);
     //write messages
     get_time();
     printf("%s %s\n", temp, message_to_log);
     fprintf(log_file, "%s %s\n", temp, message_to_log);
-    sem_post(log_mutex);
+    sem_post(&log_mutex);
 }
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
@@ -459,28 +459,28 @@ int main(int argc, char *argv[]) {
     keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[32]) + N_WORKERS * sizeof(int));
 
     //cretes unamed semaphores to protect the shared memory
-    if (sem_init(sem_data_base_reader, 1, 1) < 0) {
+    if (sem_init(&sem_data_base_reader, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_data_base_writer, 1, 1) < 0) {
+    }if (sem_init(&sem_data_base_writer, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_alert_list, 1, 1) < 0) {
+    }if (sem_init(&sem_alert_list, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_sensor_list_reader, 1, 1) < 0) {
+    }if (sem_init(&sem_sensor_list_reader, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_sensor_list_writer, 1, 1) < 0) {
+    }if (sem_init(&sem_sensor_list_writer, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_workers_bitmap, 1, 1) < 0) {
+    }if (sem_init(&sem_workers_bitmap, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(sem_keys_bitmap, 1, 1) < 0) {
+    }if (sem_init(&sem_keys_bitmap, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
-    }if (sem_init(log_mutex, 1, 1) < 0) {
+    }if (sem_init(&log_mutex, 1, 1) < 0) {
         perror("semaphore initialization");
         exit(-1);
     }
@@ -521,13 +521,13 @@ int main(int argc, char *argv[]) {
         time(&t);
 
 //        write_to_log("HOME_IOT SIMULATOR STARTING");
-        sem_wait(log_mutex);
+        sem_wait(&log_mutex);
         //write messages
         get_time();
         printf("%s HOME_IOT SIMULATOR STARTING\n", temp);
         fprintf(log_file, "\n\n%s HOME_IOT SIMULATOR STARTING\n", temp);
         fflush(log_file);
-        sem_post(log_mutex);
+        sem_post(&log_mutex);
     }
 
 
