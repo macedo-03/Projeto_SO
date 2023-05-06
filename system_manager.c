@@ -11,6 +11,7 @@
 #include <sys/stat.h>
 #include <assert.h>
 #include <sys/msg.h>
+#include <string.h>
 
 #include "costumio.h"
 #include "internal_queue.h"
@@ -118,19 +119,20 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     if(message_to_process.type == 0){//mensagem do user
         sscanf(message_to_process.cmd , "%s", main_cmd);
         if(strcmp(main_cmd, "ADD_ALERT")==0){
+
             sscanf(message_to_process.cmd, "%s %s %d %d", alert_id, key, &min, &max);
             validated=1;
             //sincronizacao lock
             if(count_alerts < MAX_ALERTS){
                 for (i = 0; i < count_alerts; ++i) {
-                    if(strcmp(alert_list[i].key, key)==0){
+                    if(strcmp(alert_list[i].alert_id, alert_id)==0){
                         validated=0;
                         break;
                     }
                 }
             }
             else{
-//                validated=0;
+                validated=0;
             }
 
             if (validated){
@@ -143,6 +145,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
                 //TODO: encontrar espaco livre
                 memcpy(&alert_list[count_alerts++], new_alert, sizeof(Alert));
+                sprintf(feedback.cmd, "OK");
+            }
+            else{
+                sprintf(feedback.cmd, "ERROR");
             }
             //sincronizacao unlock
 
@@ -150,6 +156,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         else if(strcmp(main_cmd, "REMOVE_ALERT")==0) {
             sscanf(message_to_process.cmd, "%s", alert_id);
             //bla bla bla we fucked
+            sprintf(feedback.cmd, "OK");
         }
         else if(strcmp(main_cmd, "STATS")==0){
             //lock leitura
@@ -162,7 +169,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             //lock escrita
             //apagar tudo em data_base
             count_key_data=0; //is this enough?
-            strcpy(feedback.cmd, "OK");
+            sprintf(feedback.cmd, "OK");
             //send feedback to msg queue
 
         }
@@ -184,6 +191,17 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     }
     else{ //mensagem sensor
         //parse input
+        char *token;
+        token = strtok(message_to_process.cmd, "#");
+        strcpy(sensor_id, token);
+
+        token = strtok(NULL, "#");
+        strcpy(key, token);
+
+        token = strtok(NULL, "\n");
+        my_atoi(token, &value);
+
+
         validated= new_key = new_sensor = 1;
 
         //lock escrita
@@ -223,7 +241,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             memcpy(sensor_list[count_sensors++],sensor_id, sizeof(char[STR_SIZE]));
         }
         else if(!validated){
-            //escrever mensagem de descarte no log
+            sprintf(message_to_log, "Sensor message discarded: %s", message_to_process.cmd);
+            write_to_log(message_to_log);
         }
 
 
