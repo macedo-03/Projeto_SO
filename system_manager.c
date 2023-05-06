@@ -443,6 +443,18 @@ void cleaner(){
     pthread_mutex_destroy(&sensors_counter_mutex);
     pthread_mutex_destroy(&alerts_counter_mutex);
 
+    sem_close(sem_data_base_reader); sem_unlink("/sem_data_base_reader");
+    sem_close(sem_data_base_writer); sem_unlink("/sem_data_base_writer");
+    sem_close(sem_alert_list); sem_unlink("/sem_alert_list");
+    sem_close(sem_sensor_list_reader); sem_unlink("/sem_sensor_list_reader");
+    sem_close(sem_sensor_list_writer); sem_unlink("/sem_sensor_list_writer");
+    sem_close(sem_workers_bitmap); sem_unlink("/sem_workers_bitmap");
+    sem_close(sem_keys_bitmap); sem_unlink("/sem_keys_bitmap");
+    sem_close(log_mutex); sem_unlink("/log_mutex");
+    sem_close(sem_free_worker_count); sem_unlink("/sem_free_worker_count");
+
+    sem_destroy(&internal_queue_count); //TODO: mantemos isto? deprecated
+
     pthread_cond_destroy(&shm_alert_watcher_cv);
     shmctl(shmid, IPC_RMID, NULL);
 
@@ -500,38 +512,47 @@ int main(int argc, char *argv[]) {
 
 
     //cretes unamed semaphores to protect the shared memory
+    sem_unlink("/sem_data_base_reader");
     if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_data_base_writer");
     if ((sem_data_base_writer = sem_open("/sem_data_base_writer", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_alert_list");
     if ((sem_alert_list = sem_open("/sem_alert_list", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_sensor_list_reader");
     if ((sem_sensor_list_reader = sem_open("/sem_sensor_list_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_sensor_list_writer");
     if ((sem_sensor_list_writer = sem_open("/sem_sensor_list_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_workers_bitmap");
     if ((sem_workers_bitmap = sem_open("/sem_workers_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_keys_bitmap");
     if ((sem_keys_bitmap = sem_open("/sem_keys_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/log_mutex");
     if ((log_mutex = sem_open("/log_mutex", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
+    sem_unlink("/sem_free_worker_count");
     if ((sem_free_worker_count = sem_open("/sem_free_worker_count", O_CREAT | O_EXCL, 0777, N_WORKERS)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
@@ -717,13 +738,13 @@ int main(int argc, char *argv[]) {
 
 //cuidado com os iteradores globais dentro das threads
 
-//cleanup dos semaforos
+
 //DONE - quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
 
 //TODO: Miguel
 //console/sensor reader -> internal queue //falta sincronizacao
 //dispatcher forward messages to work //falta sincronizacao
-
+//DONE - cleanup dos semaforos
 
 
 //TODO: Zheeeee?
