@@ -174,7 +174,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     strcpy(new_alert->key, key);
                     strcpy(new_alert->alert_id, alert_id);
 
-                    //TODO: encontrar espaco livre - a partida esta resolvido
+
                     memcpy(&alert_list[*count_alerts], new_alert, sizeof(Alert));
 #ifdef DEBUG
                     printf("WORKER: NOVO ALERTA: %s\n", alert_list[*count_alerts].alert_id);
@@ -250,7 +250,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 //lock escrita
                 //clean every stats in the data base
                 sem_wait(sem_alert_list_writer);
-                *count_key_data = 0; //TODO: is this enough?
+                *count_key_data = 0;
                 sem_post(sem_alert_list_writer);
                 sprintf(feedback.cmd, "OK");
 #ifdef DEBUG
@@ -422,7 +422,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("WORKER: CREATE SENSOR\n");
 #endif
-                memcpy(sensor_list[*count_sensors], sensor_id, sizeof(char[STR_SIZE])); //TODO: solve this
+                memcpy(sensor_list[*count_sensors], sensor_id, sizeof(char[STR_SIZE]));
 
                 *count_sensors+=1;
             } else if (!validated) {
@@ -505,6 +505,7 @@ void alerts_watcher_process(){
                     msg_to_send.message_id = alert_list[k].user_console_id;
                     sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
                             alert_list[k].alert_id, alert_list[k].key);
+                    msgsnd(mq_id, &msg_to_send, sizeof(Message)-sizeof(long), 0);
                     //TODO: send message to message queue
                 }
             }
@@ -984,29 +985,26 @@ int main(int argc, char *argv[]) {
     //QUASE DONE - console reader - descartar mensagens (qnd a internal queue esta cheia (get_value))
 
 
-//worker processing sensors, descartar mensagens quando nao cumpre todos os requesitos - thinks it's done
-//worker processing console, descartar mensagens ou quando nao cumpre todos os requesitos -
-
-//remove alerts. HOW? Maybe RC style - DONE
+//remove alerts when console exits
 
 //REMOVI OS WARNINGS - alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
-//QUAIS WARNINGS?
-
 //cuidado com os iteradores globais dentro das threads
-
-
 //DONE - quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
 
+//ALERT WATCHER
+//SIGNALS
+
+
 //TODO: Miguel
-//console/sensor reader -> internal queue //falta sincronizacao
-//dispatcher forward messages to work //falta sincronizacao
+//console/sensor reader -> internal queue DONE
+//dispatcher forward messages to work DONE
 //DONE - cleanup dos semaforos
 
-//trocar unnamed semaphore para variavel de condicao
+//trocar unnamed semaphore para variavel de condicao DONE
 //trocar iteradores - DONE
 
-//sincronizacao
-//testar
+//sincronizacao DONE //falta alert_watcher
+
 
 
 
