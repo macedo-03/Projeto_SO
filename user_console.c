@@ -147,6 +147,7 @@ int main(int argc, char *argv[]){
             m.type = 0;
             printf("buf: %s\n", buf);
             buf[strlen(buf)-1] = '\0';
+            string_to_upper(buf);
             strcpy(m.cmd, buf);
             write(pipe_id, &m, sizeof(Message));
         }

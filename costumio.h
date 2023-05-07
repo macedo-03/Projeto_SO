@@ -17,5 +17,6 @@
 int my_atoi(char str[], int *int_number);
 int convert_int(char str[], int* number);
 int input_str(char str[], int underscore);
+void string_to_upper(char str[]);
 
 #endif //PROJETO_SO_COSTUMIO_H

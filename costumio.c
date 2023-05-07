@@ -71,3 +71,11 @@ int input_str(char str[], int underscore){
 }
 
 
+void string_to_upper(char str[]){
+    int i = 0;
+    int len = (int) strlen(str);
+    while (i<len){
+        str[i] = (char) toupper(str[i]);
+        i++;
+    }
+}

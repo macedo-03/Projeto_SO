@@ -8,7 +8,7 @@
 InternalQueue* create_internal_queue(){
     InternalQueue *internal_queue = malloc(sizeof(InternalQueue));
     if(internal_queue){
-        internal_queue->start=NULL;
+        internal_queue->start= internal_queue->end = NULL;
         internal_queue->size=0;
     }
     return internal_queue;
@@ -30,6 +30,7 @@ void insert_internal_queue(InternalQueue *this_internal_queue, Message *message_
         }
         //1 ou + nos
         else{
+            this_internal_queue->end->next = new_message;
             this_internal_queue->end = new_message;
         }
         this_internal_queue->size +=1;
@@ -44,10 +45,10 @@ Message delete_node(InternalQueue* this_internal_queue){
 
     if(this_internal_queue->size == 1){
         this_internal_queue->start = this_internal_queue->end = NULL;
-        this_internal_queue->size=0;
     }else{
         this_internal_queue->start = this_internal_queue->start->next;
     }
+//    printf("DELETER: %s\n", message_to_dispatch.cmd);
     this_internal_queue->size--;
     internal_queue_size--;
 
@@ -60,10 +61,12 @@ Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* i
     if(internal_queue_console->size>0){
         m = delete_node(internal_queue_console);
     }
-    else //if(internal_queue_sensor->size>0){
-    {
+    else if(internal_queue_sensor->size>0){
         m =  delete_node(internal_queue_sensor);
     }
-    printf("message to dispatch: %s\n", m.cmd);
+    else{
+        printf("VAZIO!\n");
+    }
+//    printf("NEXT MESSAGE: %s\n", m.cmd);
     return m;
 }

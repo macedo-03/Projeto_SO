@@ -9,7 +9,7 @@
 
 #include "costumio.h"
 #define PIPE_NAME "SENSOR_PIPE"
-#define BUF_SIZE 256
+#define BUF_SIZE 64
 int pipe_id;
 
 int main(int argc, char *argv[]){
