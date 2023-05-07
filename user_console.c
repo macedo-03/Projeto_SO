@@ -1,7 +1,7 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
 
-#define DEBUG //remove this line to remove debug messages (...)
+//#define DEBUG //remove this line to remove debug messages (...)
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -40,7 +40,13 @@ void handler(){
 void *read_msq(){
     while (1) {
         msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0);
-        printf("%s", msg.cmd);
+        if(msg.type == 0){
+            printf("\nALERT!\n%s\n", msg.cmd);
+        }else{
+            printf("%s\n", msg.cmd);
+        }
+
+
     }
     pthread_exit(NULL);
     return NULL;
@@ -77,6 +83,11 @@ int main(int argc, char *argv[]){
     id = getpid();
     pthread_create(&mq_reader, NULL, read_msq, NULL);
 
+    Message m;
+    m.message_id = id;
+    m.type = 0;
+
+
     printf("Menu:\n"
            "- exit\n"
            "- stats\n"      //sem_data_base_writer  sem_data_base_reader    (READ)
@@ -88,12 +99,13 @@ int main(int argc, char *argv[]){
            //sensor count_sensor    //sem_sensor_list_writer    sem_sensor_list_reader  //sem_data_base_writer  (WRITE)
            //alert watcher          //sem_alert_list_writer     sem_alert_list_reader   (READ)
 
+
     fgets(buf, BUF_SIZE, stdin);
     sscanf(buf, "%s", cmd);
     printf("%s\n", cmd);
     if(!input_str(cmd, 1)){
         printf("Erro de formatacao do comando\n");
-        exit(-1);
+//        exit(-1); //TODO: isto e suposto tirar certo?
     }
 
 
@@ -158,9 +170,7 @@ int main(int argc, char *argv[]){
         }
 
         if (valido) {
-            Message m;
-            m.message_id = id;
-            m.type = 0;
+
 #ifdef DEBUG
             printf("buf: %s\n", buf);
 #endif
@@ -170,6 +180,7 @@ int main(int argc, char *argv[]){
             write(pipe_id, &m, sizeof(Message));
         }
 
+
         fgets(buf, BUF_SIZE, stdin);
         sscanf(buf, "%s", cmd);
         if(!input_str(cmd, 1)){
@@ -177,6 +188,10 @@ int main(int argc, char *argv[]){
             exit(-1);
         }
     }
+
+//    send "exit" to system_manager
+//    strcpy(m.cmd, cmd);
+//    write(pipe_id, &m, sizeof(Message));
 
     return 0;
 }

@@ -64,12 +64,7 @@ Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* i
     else if(internal_queue_sensor->size>0){
         m =  delete_node(internal_queue_sensor);
     }
-    else{
-#ifdef DEBUG
-        printf("VAZIO!\n");
-#endif
 
-    }
 //    printf("NEXT MESSAGE: %s\n", m.cmd);
     return m;
 }

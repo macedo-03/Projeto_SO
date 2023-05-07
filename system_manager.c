@@ -8,7 +8,7 @@
 
 // add_alert alert1 TEMP1 3 6
 
-#define DEBUG //remove this line to remove debug messages (...)
+//#define DEBUG //remove this line to remove debug messages (...)
 
 
 #include <stdio.h>
@@ -153,7 +153,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     for (i = 0; i < *count_alerts; ++i) {
                         if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
 #ifdef DEBUG
-                            printf("WORKER: JA EXISTE ALERTA\n", feedback.cmd);
+                            printf("WORKER: JA EXISTE ALERTA\n");
 #endif
                             validated = 0;
                             break;
@@ -161,7 +161,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     }
                 } else {
 #ifdef DEBUG
-                    printf("WORKER: NUMERO MAXIMO DE ALERTAS\n", feedback.cmd);
+                    printf("WORKER: NUMERO MAXIMO DE ALERTAS\n");
 #endif
                     validated = 0;
                 }
@@ -185,7 +185,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     sprintf(feedback.cmd, "ERROR");
                 }
                 sem_post(sem_alert_list_writer);
-                //sincronizacao unlock
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
 
             } else if (strcmp(main_cmd, "REMOVE_ALERT") == 0) {
                 sscanf(message_to_process.cmd, "%s %s", main_cmd, alert_id);
@@ -194,13 +194,14 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 for (i = 0; i < *count_alerts; ++i) {
                     if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
 #ifdef DEBUG
-                        printf("WORKER: ALERTA ENCONTRADO\n", feedback.cmd);
+                        printf("WORKER: ALERTA ENCONTRADO\n");
 #endif
                         for (j = i + 1; j < *count_alerts; j++) {
                             alert_id[j - 1] = alert_id[j];
                         }
                         validated = 1;
                         *count_alerts -= 1;
+                        sprintf(feedback.cmd, "OK");
                         break;
                     }
                 }
@@ -208,12 +209,14 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 if (!validated) {
                     sprintf(feedback.cmd, "ERROR");
                 }
-                sprintf(feedback.cmd, "OK");
+
+
 #ifdef DEBUG
                 printf("%s\n", feedback.cmd);
 #endif
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
             } else if (strcmp(main_cmd, "STATS") == 0) {
-                printf("STATS PROCESSING\n");
+
                 //lock leitura
                 sem_wait(sem_data_base_reader);
                 *database_readers+=1;
@@ -222,7 +225,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 }
                 sem_post(sem_data_base_reader);
 
-
+                sprintf(feedback.cmd, "Key\tLast\tMin\tMax\tAvg\tCount");
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                 for (i = 0; i < *count_key_data; ++i) {
                     sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value,
                             data_base[i].min_value, data_base[i].max_value, data_base[i].average,
@@ -230,6 +234,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
+                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                    //TODO: return do send
                     //send feedback to msg queue
                 }
                 sem_wait(sem_data_base_reader);
@@ -240,7 +246,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 sem_post(sem_data_base_reader);
 
             } else if (strcmp(main_cmd, "RESET") == 0) {
-                printf("RESET PROCESSING\n");
+
                 //lock escrita
                 //clean every stats in the data base
                 sem_wait(sem_alert_list_writer);
@@ -250,6 +256,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("%s\n", feedback.cmd);
 #endif
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                 //send feedback to msg queue
 
 
@@ -262,18 +269,23 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 }
                 sem_post(sem_alert_list_reader);
 
-
+#ifdef DEBUG
                 printf("\n--LISTA DE ALERTAS--\n");
+#endif
+
+                sprintf(feedback.cmd, "ID\tKey\tMIN\tMAX");
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                 for (i = 0; i < *count_alerts; ++i) {
                     sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id, alert_list[i].key,
                             alert_list[i].alert_min, alert_list[i].alert_max);
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
+                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                     //send feedback to msg queue
                 }
 
-                sem_wait(alert_list);
+                sem_wait(sem_alert_list_reader);
                 *alert_readers-=1;
                 if(*alert_readers == 0){
                     sem_post(sem_alert_list_writer);
@@ -288,12 +300,17 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     sem_wait(sem_sensor_list_writer);
                 }
                 sem_post(sem_sensor_list_reader);
+#ifdef DEBUG
                 printf("\n--LISTA DE SENSORES--\n");
+#endif
+                sprintf(feedback.cmd, "ID");
+                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                 for (i = 0; i < *count_sensors; ++i) {
                     sprintf(feedback.cmd, "%s", sensor_list[i]);
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
+                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                     //send feedback to msg queue
                 }
                 sem_wait(sem_sensor_list_reader);
@@ -303,6 +320,24 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 }
                 sem_post(sem_sensor_list_reader);
             }
+//            else if(strcmp(main_cmd, "EXIT") == 0){
+//
+//                sem_wait(sem_alert_list_writer);
+//                for (i = 0; i < *count_alerts; ++i) {
+//                    if (alert_list[i].user_console_id == message_to_process.message_id) {
+//#ifdef DEBUG
+//                        printf("WORKER: ALERTA ENCONTRADO\n");
+//#endif
+//                        for (j = i + 1; j < *count_alerts; j++) {
+//                            alert_id[j - 1] = alert_id[j];
+//                        }
+//                        *count_alerts -= 1;
+//                    }
+//                }
+//                sem_post(sem_alert_list_writer);
+//
+//            }
+
 
         } else { //mensagem sensor
 
