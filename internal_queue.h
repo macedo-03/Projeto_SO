@@ -4,6 +4,8 @@
 #ifndef PROJETO_SO_INTERNAL_QUEUE_H
 #define PROJETO_SO_INTERNAL_QUEUE_H
 
+#define DEBUG //remove this line to remove debug messages (...)
+
 //#includes here
 #include <stdlib.h>
 #include <stdio.h>

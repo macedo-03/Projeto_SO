@@ -1,6 +1,8 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
 
+#define DEBUG //remove this line to remove debug messages (...)
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -111,7 +113,9 @@ int main(int argc, char *argv[]){
                 //exit(-1);
             }
             //sprintf(buf, "%s %s %s %d %d", cmd, alert_id, key, min, max);
+#ifdef DEBUG
             printf("add_alert\n");
+#endif
         }
         else if(strcmp(cmd, "REMOVE_ALERT")==0){
             sscanf(buf, "%s", alert_id);
@@ -121,19 +125,29 @@ int main(int argc, char *argv[]){
                 //exit(-1);
             }
             //sprintf(buf, "%s %s", cmd, alert_id);
+#ifdef DEBUG
             printf("remove_alert\n");
+#endif
         }
         else if(strcmp(cmd, "STATS")==0){
+#ifdef DEBUG
             printf("stats\n");
+#endif
         }
         else if(strcmp(cmd, "RESET")==0){
+#ifdef DEBUG
             printf("reset\n");
+#endif
         }
         else if(strcmp(cmd, "LIST_ALERTS")==0){
+#ifdef DEBUG
             printf("list_alerts\n");
+#endif
         }
         else if(strcmp(cmd, "SENSORS")==0){
+#ifdef DEBUG
             printf("sensors\n");
+#endif
         }
         else{
             printf("Comando nao reconhecido\n");
@@ -145,7 +159,9 @@ int main(int argc, char *argv[]){
             Message m;
             m.message_id = id;
             m.type = 0;
+#ifdef DEBUG
             printf("buf: %s\n", buf);
+#endif
             buf[strlen(buf)-1] = '\0';
             string_to_upper(buf);
             strcpy(m.cmd, buf);

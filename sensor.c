@@ -1,6 +1,8 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
 
+#define DEBUG //remove this line to remove debug messages (...)
+
 #include <unistd.h> // process
 #include <stdio.h>
 #include <stdlib.h>
@@ -43,7 +45,9 @@ int main(int argc, char *argv[]){
     char msg[BUF_SIZE];
     while(1){
         sprintf(msg, "%s#%s#%d", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value);
+#ifdef DEBUG
         printf("%s\n", msg);
+#endif
         write(pipe_id, &msg, BUF_SIZE);
         sleep(time_interval);
     }

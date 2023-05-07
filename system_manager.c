@@ -1,6 +1,9 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
 
+#define DEBUG //remove this line to remove debug messages (...)
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h> // process
@@ -128,7 +131,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
 
         if (message_to_process.type == 0) {//mensagem do user
+#ifdef DEBUG
             printf("WORKER: message being processed: %s\n", message_to_process.cmd);
+#endif
+
             sscanf(message_to_process.cmd, "%s", main_cmd);
             if (strcmp(main_cmd, "ADD_ALERT") == 0) {
 
@@ -229,28 +235,48 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             token = strtok(NULL, "\n");
             my_atoi(token, &value);
 
+#ifdef DEBUG
             printf("WORKER: MENSAGEM SENSOR: %s %s %d\n", sensor_id, key, value);
+#endif
+
             validated = new_key = new_sensor = 1; //1 - true
 
             //lock escrita
+
+#ifdef DEBUG
             printf("WORKER: number of sensors: %d\n", *count_key_data);
+#endif
             for (i = 0; i < *count_sensors; i++) {
+#ifdef DEBUG
                 printf("SENSOR stored/new: %s\t%s\n",sensor_list[i], sensor_id);
+#endif
                 if (strcmp(sensor_list[i], sensor_id) == 0) {
+#ifdef DEBUG
                     printf("WORKER: SENSOR JA EXISTE\n");
+#endif
+
                     new_sensor = 0;
                     break;
                 }
             }
             if (new_sensor == 1 && *count_sensors == MAX_SENSORS) {
+#ifdef DEBUG
                 printf("WORKER: MAX SENSORES ATINGIDO\n");
+#endif
+
                 validated = 0;
             }
+#ifdef DEBUG
             printf("WORKER: number of keys: %d\n", *count_key_data);
+#endif
             for (i = 0; i < *count_key_data && validated; i++) {
+#ifdef DEBUG
                 printf("KEY stored/new: %s\t%s\n",data_base[i].key, key );
+#endif
                 if (strcmp(data_base[i].key, key) == 0) { //update key
+#ifdef DEBUG
                     printf("WORKER: UPDATE KEY\n");
+#endif
                     new_key = 0;
                     data_base[i].last_value = value;
                     data_base[i].average =
@@ -263,7 +289,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             }
             if (new_key == 1 && validated) { //create key
                 if (*count_key_data < MAX_KEYS) {
+#ifdef DEBUG
                     printf("WORKER: CREATE KEY\n");
+#endif
                     key_data *new_key_data = malloc(sizeof(key_data));
                     strcpy(new_key_data->key, key);
                     new_key_data->last_value = new_key_data->min_value = new_key_data->max_value = value;
@@ -275,8 +303,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 }
             }
             if (new_sensor == 1 && validated) {
+#ifdef DEBUG
                 printf("WORKER: CREATE SENSOR\n");
-                memcpy(&sensor_list[*count_sensors], sensor_id, sizeof(char[STR_SIZE])); //TODO: solve this
+#endif
+                memcpy(sensor_list[*count_sensors], sensor_id, sizeof(char[STR_SIZE])); //TODO: solve this
 
                 *count_sensors+=1;
             } else if (!validated) {
@@ -372,7 +402,9 @@ void *sensor_reader(){
     while(1){ //condicao dos pipes
         //read sensor string from pipe
         read(sensor_pipe_id, sensor_info, STR_SIZE);
+#ifdef DEBUG
         printf("\n%s\n", sensor_info);
+#endif
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
         sensor_message.message_id = 0;
@@ -387,7 +419,9 @@ void *sensor_reader(){
 //            sem_post(&internal_queue_count);
             insert_internal_queue(internal_queue_sensor, &sensor_message);
             pthread_cond_signal(&new_message_cv);
+#ifdef DEBUG
             printf("sensor message to queue\n");
+#endif
         }
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
@@ -409,7 +443,9 @@ void *console_reader(){
 
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
+#ifdef DEBUG
         printf("\nmessage received: %s\n", console_message.cmd);
+#endif
         //get_value of semaphore. if internal queue is full -> continue;
 //        sem_getvalue(&internal_queue_count, &sem_value);
 //        //semaphore
@@ -417,7 +453,9 @@ void *console_reader(){
         if (internal_queue_size < QUEUE_SZ){
 //            sem_post(&internal_queue_count);
             insert_internal_queue(internal_queue_console, &console_message);
+#ifdef DEBUG
             printf("console message to queue\n");
+#endif
             pthread_cond_signal(&new_message_cv);
 
         }
@@ -449,14 +487,21 @@ void *dispatcher(){
 //        //prende pelo semaforo da internal queue
 //        sem_wait(&internal_queue_count);
         //executa codigo em baixo
+#ifdef DEBUG
         printf("internal queue size before = %d\n", internal_queue_size);
+#endif
         Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
+#ifdef DEBUG
         printf("internal queue size after = %d\n", internal_queue_size);
+#endif
         for (k = 0; k < N_WORKERS; ++k) {
             if(workers_bitmap[k] == 1){
                 workers_bitmap[k] = 0; //mark worker as busy
                 write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
+#ifdef DEBUG
                 printf("Message dispatched: %s\t worker: %d\n", message_to_dispatch.cmd, k+1);
+#endif
+
                 break;
             }
         }
@@ -537,18 +582,38 @@ int main(int argc, char *argv[]) {
     id_t childpid;
 
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 3 * sizeof(int), IPC_CREAT | 0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + ( MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) ) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 3 * sizeof(int), IPC_CREAT | 0777);
     if (shmid < 1) exit(0);
     void *shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
+//    data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
+//    alert_list = (Alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
+//    sensor_list = (char **) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
+//    for(i =0; i<MAX_SENSORS;i++){
+//        sensor_list[i] = (char *) (sensor_list + MAX_SENSORS * sizeof(char *) + i * sizeof(char[STR_SIZE]));
+//    }
+//    workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]));
+//    keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) + N_WORKERS * sizeof(int));
+//    count_key_data = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS)* sizeof(int));
+//    count_alerts = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS + 1)* sizeof(int));
+//    count_sensors = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS + 2)* sizeof(int));
+
+
+
+
     data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
-    alert_list = (Alert*) ((char*)shm_global + MAX_KEYS * sizeof(key_data));     //store alerts
-    sensor_list = (char **) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
-    workers_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]));
-    keys_bitmap = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]) + N_WORKERS * sizeof(int));
-    count_key_data = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS)* sizeof(int));
-    count_alerts = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS + 1)* sizeof(int));
-    count_sensors = (int *) ((char*)shm_global + MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + MAX_SENSORS * sizeof(char[STR_SIZE]) + (N_WORKERS + MAX_KEYS + 2)* sizeof(int));
+    alert_list = (Alert*) ((char*)data_base + MAX_KEYS * sizeof(key_data));     //store alerts
+    sensor_list = (char **) ((char*)alert_list + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
+    for(i =0; i<MAX_SENSORS;i++){
+        sensor_list[i] = (char *) (sensor_list + MAX_SENSORS * sizeof(char *) + i * sizeof(char[STR_SIZE]));
+    }
+    workers_bitmap = (int *) ((char*)sensor_list +  MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]));
+    keys_bitmap = (int *) ((char*)workers_bitmap +  N_WORKERS * sizeof(int));
+    count_key_data = (int *) ((char*)keys_bitmap +   MAX_KEYS * sizeof(int));
+    count_alerts = (int *) ((char*)keys_bitmap  + (MAX_KEYS + 1) * sizeof(int));
+    count_sensors = (int *) ((char*)keys_bitmap + (MAX_KEYS + 2) * sizeof(int));
+
+
 
     for (i = 0; i < N_WORKERS; ++i) {
         workers_bitmap[i] = 0;
