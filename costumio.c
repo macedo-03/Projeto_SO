@@ -27,14 +27,21 @@ int my_atoi(char str[], int *int_number){
 
 
 int convert_int(char str[], int* number){
+    printf("%s\n", str);
     int i=0;
     int len= (int) strlen(str);
     if(str[i]=='-') i++;
     while (i<len){
-        if(!isdigit(str[i])) return 0;
+        if(!isdigit(str[i])){
+            printf("NAO E UM DIGITO\n");
+            return 0;
+        }
         i++;
     }
-    if(number!=NULL && !my_atoi(str, number)) return 0;
+    if(number!=NULL && !my_atoi(str, number)){
+        printf("ERRO DE CONVERSAO\n");
+        return 0;
+    }
     return 1;
 }
 
@@ -50,17 +57,17 @@ int input_str(char str[], int underscore){
     //se a string estiver vazia -> return false
     if(len<3) return 0;
     if(len>MY_MAX_INPUT) return 0;
-
+    printf("NO SIZE ISSUES\n");
     int i=0;
     //enquanto os caracteres da string forem letras ou underscore _
     while (i<len){
         //adiciona o dígito à string "converting"
         if(underscore==1 && !(isalpha(str[i]) || isdigit(str[i]) || str[i] == '_')){
-//            printf("1bosta: %c\n", str[i]);
+            printf("1bosta: %c\n", str[i]);
             return 0;
         }
         else if(underscore==0 && !(isalpha(str[i]) || isdigit(str[i]))){
-//            printf("0bosta: %c\n", str[i]);
+            printf("0bosta: %c\n", str[i]);
             return 0;
         }
         str[i] = (char) toupper(str[i]);

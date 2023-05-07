@@ -90,6 +90,7 @@ int main(int argc, char *argv[]){
 
     fgets(buf, BUF_SIZE, stdin);
     sscanf(buf, "%s", cmd);
+    printf("%s\n", cmd);
     if(!input_str(cmd, 1)){
         printf("Erro de formatacao do comando\n");
         exit(-1);
@@ -99,8 +100,8 @@ int main(int argc, char *argv[]){
     while (strcmp(cmd, "EXIT")!=0){
         valido = 1;
         if(strcmp(cmd, "ADD_ALERT")==0){
-            sscanf(buf, "%s %s %s %s", alert_id, key, str_min, str_max);
-
+            sscanf(buf, "%s %s %s %s %s", cmd, alert_id, key, str_min, str_max);
+            printf("%s\t%s\t%s\t%s\n",alert_id, key, str_min, str_max );
             if(!(convert_int(str_min, &min) &&
                     convert_int(str_max, &max) &&
                     input_str(alert_id, 0) &&
@@ -119,7 +120,7 @@ int main(int argc, char *argv[]){
 #endif
         }
         else if(strcmp(cmd, "REMOVE_ALERT")==0){
-            sscanf(buf, "%s", alert_id);
+            sscanf(buf, "%s %s",cmd, alert_id);
             if(!input_str(alert_id, 0)){
                 printf("Erro de formatacao do argumento\n");
                 valido = 0;

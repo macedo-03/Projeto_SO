@@ -145,17 +145,23 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             sscanf(message_to_process.cmd, "%s", main_cmd);
             if (strcmp(main_cmd, "ADD_ALERT") == 0) {
 
-                sscanf(message_to_process.cmd, "%s %s %d %d", alert_id, key, &min, &max);
+                sscanf(message_to_process.cmd, "%s %s %s %d %d", main_cmd, alert_id, key, &min, &max);
                 validated = 1;
                 //sincronizacao lock
                 if (*count_alerts < MAX_ALERTS) {
                     for (i = 0; i < *count_alerts; ++i) {
                         if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
+#ifdef DEBUG
+                            printf("WORKER: JA EXISTE ALERTA\n", feedback.cmd);
+#endif
                             validated = 0;
                             break;
                         }
                     }
                 } else {
+#ifdef DEBUG
+                    printf("WORKER: NUMERO MAXIMO DE ALERTAS\n", feedback.cmd);
+#endif
                     validated = 0;
                 }
 
@@ -169,7 +175,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
                     //TODO: encontrar espaco livre - a partida esta resolvido
                     memcpy(&alert_list[*count_alerts], new_alert, sizeof(Alert));
-                    count_alerts+=1;
+#ifdef DEBUG
+                    printf("WORKER: NOVO ALERTA: %s\n", alert_list[*count_alerts].alert_id);
+#endif
+                    *count_alerts+=1;
                     sprintf(feedback.cmd, "OK");
                 } else {
                     sprintf(feedback.cmd, "ERROR");
@@ -177,14 +186,17 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 //sincronizacao unlock
 
             } else if (strcmp(main_cmd, "REMOVE_ALERT") == 0) {
-                sscanf(message_to_process.cmd, "%s", alert_id);
-                validated = 1;
+                sscanf(message_to_process.cmd, "%s %s", main_cmd, alert_id);
+                validated = 0;
                 for (i = 0; i < *count_alerts; ++i) {
                     if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
+#ifdef DEBUG
+                        printf("WORKER: ALERTA ENCONTRADO\n", feedback.cmd);
+#endif
                         for (j = i + 1; j < *count_alerts; j++) {
                             alert_id[j - 1] = alert_id[j];
                         }
-                        validated = 0;
+                        validated = 1;
                         *count_alerts -= 1;
                         break;
                     }
@@ -193,6 +205,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     sprintf(feedback.cmd, "ERROR");
                 }
                 sprintf(feedback.cmd, "OK");
+#ifdef DEBUG
+                printf("%s\n", feedback.cmd);
+#endif
             } else if (strcmp(main_cmd, "STATS") == 0) {
                 printf("STATS PROCESSING\n");
                 //lock leitura
@@ -201,6 +216,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value,
                             data_base[i].min_value, data_base[i].max_value, data_base[i].average,
                             data_base[i].n_updates);
+#ifdef DEBUG
+                    printf("%s\n", feedback.cmd);
+#endif
                     //send feedback to msg queue
                 }
             } else if (strcmp(main_cmd, "RESET") == 0) {
@@ -209,20 +227,31 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 //clean every stats in the data base
                 *count_key_data = 0; //TODO: is this enough?
                 sprintf(feedback.cmd, "OK");
+#ifdef DEBUG
+                printf("%s\n", feedback.cmd);
+#endif
                 //send feedback to msg queue
 
 
             } else if (strcmp(main_cmd, "LIST_ALERTS") == 0) {
                 //lock leitura
+                printf("\n--LISTA DE ALERTAS--\n");
                 for (i = 0; i < *count_alerts; ++i) {
                     sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id, alert_list[i].key,
                             alert_list[i].alert_min, alert_list[i].alert_max);
+#ifdef DEBUG
+                    printf("%s\n", feedback.cmd);
+#endif
                     //send feedback to msg queue
                 }
             } else if (strcmp(main_cmd, "SENSORS") == 0) {
                 //lock leitura
+                printf("\n--LISTA DE SENSORES--\n");
                 for (i = 0; i < *count_sensors; ++i) {
                     sprintf(feedback.cmd, "%s", sensor_list[i]);
+#ifdef DEBUG
+                    printf("%s\n", feedback.cmd);
+#endif
                     //send feedback to msg queue
                 }
             }
