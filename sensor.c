@@ -1,5 +1,27 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
+/*
+ ./sensor 0011 1 TEMP11 1 10 &
+ ./sensor 0012 1 TEMP12 1 10 &
+ ./sensor 0013 1 TEMP13 1 10 &
+ ./sensor 0014 1 TEMP14 1 10 &
+ ./sensor 0015 1 TEMP15 1 10 &
+ ./sensor 0016 1 TEMP16 1 10 &
+ ./sensor 0017 1 TEMP17 1 10 &
+ ./sensor 0018 1 TEMP18 1 10 &
+ ./sensor 0019 1 TEMP19 1 10 &
+
+ ./sensor 0021 1 TEMP21 1 10 &
+ ./sensor 0022 1 TEMP22 1 10 &
+ ./sensor 0023 1 TEMP23 1 10 &
+ ./sensor 0024 1 TEMP24 1 10 &
+ ./sensor 0025 1 TEMP25 1 10 &
+ ./sensor 0026 1 TEMP26 1 10 &
+ ./sensor 0027 1 TEMP27 1 10 &
+ ./sensor 0028 1 TEMP28 1 10 &
+ ./sensor 0029 1 TEMP29 1 10 &
+*/
+
 
 #define DEBUG //remove this line to remove debug messages (...)
 

@@ -80,12 +80,12 @@ int main(int argc, char *argv[]){
     printf("Menu:\n"
            "- exit\n"
            "- stats\n"      //sem_data_base_writer  sem_data_base_reader    (READ)
-           "- reset\n"      //sem_data_base_writer  sem_data_base_reader    (READ)
+           "- reset\n"      //sem_data_base_writer  sem_data_base_reader    (WRITE)
            "- sensors\n"    //sem_sensor_list_writer    sem_sensor_list_reader  (READ)
            "- add_alert [id] [chave] [min] [max]\n" //sem_alert_list_writer     sem_alert_list_reader   (WRITE)
            "- remove_alert [id]\n"  //sem_alert_list_writer     sem_alert_list_reader   (WRITE)
            "- list_alerts\n\n");    //sem_alert_list_writer     sem_alert_list_reader   (READ)
-           //sensor count_sensor    //sem_sensor_list_writer    sem_sensor_list_reader  //sem_data_base_writer  (READ)
+           //sensor count_sensor    //sem_sensor_list_writer    sem_sensor_list_reader  //sem_data_base_writer  (WRITE)
            //alert watcher          //sem_alert_list_writer     sem_alert_list_reader   (READ)
 
     fgets(buf, BUF_SIZE, stdin);

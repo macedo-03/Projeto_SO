@@ -6,6 +6,8 @@
 // ./user_console 123
 // ./sensor 2342 7 TEMP10 1 10
 
+// add_alert alert1 TEMP1 3 6
+
 #define DEBUG //remove this line to remove debug messages (...)
 
 
@@ -85,6 +87,8 @@ char **sensor_list;
 int *workers_bitmap;
 int *keys_bitmap;
 int *count_sensors, *count_alerts, *count_key_data;
+int *sensor_readers, *alert_readers, *database_readers;
+
 
 time_t t;
 struct tm *time_info;
@@ -130,24 +134,21 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     //while(1)
     while (1) {
 
-
         //read instruction from dispatcher pipe
         read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message));
-
-
 
         if (message_to_process.type == 0) {//mensagem do user
             feedback.message_id = message_to_process.message_id;
 #ifdef DEBUG
             printf("WORKER: message being processed: %s\n", message_to_process.cmd);
 #endif
-
             sscanf(message_to_process.cmd, "%s", main_cmd);
-            if (strcmp(main_cmd, "ADD_ALERT") == 0) {
 
+            if (strcmp(main_cmd, "ADD_ALERT") == 0) {
                 sscanf(message_to_process.cmd, "%s %s %s %d %d", main_cmd, alert_id, key, &min, &max);
                 validated = 1;
                 //sincronizacao lock
+                sem_wait(sem_alert_list_writer);
                 if (*count_alerts < MAX_ALERTS) {
                     for (i = 0; i < *count_alerts; ++i) {
                         if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
@@ -183,11 +184,13 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 } else {
                     sprintf(feedback.cmd, "ERROR");
                 }
+                sem_post(sem_alert_list_writer);
                 //sincronizacao unlock
 
             } else if (strcmp(main_cmd, "REMOVE_ALERT") == 0) {
                 sscanf(message_to_process.cmd, "%s %s", main_cmd, alert_id);
                 validated = 0;
+                sem_wait(sem_alert_list_writer);
                 for (i = 0; i < *count_alerts; ++i) {
                     if (strcmp(alert_list[i].alert_id, alert_id) == 0) {
 #ifdef DEBUG
@@ -201,6 +204,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                         break;
                     }
                 }
+                sem_post(sem_alert_list_writer);
                 if (!validated) {
                     sprintf(feedback.cmd, "ERROR");
                 }
@@ -211,6 +215,13 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             } else if (strcmp(main_cmd, "STATS") == 0) {
                 printf("STATS PROCESSING\n");
                 //lock leitura
+                sem_wait(sem_data_base_reader);
+                *database_readers+=1;
+                if(*database_readers == 1){
+                    sem_wait(sem_data_base_writer);
+                }
+                sem_post(sem_data_base_reader);
+
 
                 for (i = 0; i < *count_key_data; ++i) {
                     sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value,
@@ -221,11 +232,20 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #endif
                     //send feedback to msg queue
                 }
+                sem_wait(sem_data_base_reader);
+                *database_readers-=1;
+                if(*database_readers == 0){
+                    sem_post(sem_data_base_writer);
+                }
+                sem_post(sem_data_base_reader);
+
             } else if (strcmp(main_cmd, "RESET") == 0) {
                 printf("RESET PROCESSING\n");
                 //lock escrita
                 //clean every stats in the data base
+                sem_wait(sem_alert_list_writer);
                 *count_key_data = 0; //TODO: is this enough?
+                sem_post(sem_alert_list_writer);
                 sprintf(feedback.cmd, "OK");
 #ifdef DEBUG
                 printf("%s\n", feedback.cmd);
@@ -234,7 +254,15 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
 
             } else if (strcmp(main_cmd, "LIST_ALERTS") == 0) {
-                //lock leitura
+
+                sem_wait(sem_alert_list_reader);
+                *alert_readers+=1;
+                if(*alert_readers == 1){
+                    sem_wait(sem_alert_list_writer);
+                }
+                sem_post(sem_alert_list_reader);
+
+
                 printf("\n--LISTA DE ALERTAS--\n");
                 for (i = 0; i < *count_alerts; ++i) {
                     sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id, alert_list[i].key,
@@ -244,8 +272,22 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #endif
                     //send feedback to msg queue
                 }
+
+                sem_wait(alert_list);
+                *alert_readers-=1;
+                if(*alert_readers == 0){
+                    sem_post(sem_alert_list_writer);
+                }
+                sem_post(sem_alert_list_reader);
+
             } else if (strcmp(main_cmd, "SENSORS") == 0) {
-                //lock leitura
+
+                sem_wait(sem_sensor_list_reader);
+                *sensor_readers+=1;
+                if(*sensor_readers == 1){
+                    sem_wait(sem_sensor_list_writer);
+                }
+                sem_post(sem_sensor_list_reader);
                 printf("\n--LISTA DE SENSORES--\n");
                 for (i = 0; i < *count_sensors; ++i) {
                     sprintf(feedback.cmd, "%s", sensor_list[i]);
@@ -254,6 +296,12 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #endif
                     //send feedback to msg queue
                 }
+                sem_wait(sem_sensor_list_reader);
+                *sensor_readers-=1;
+                if(*sensor_readers == 0){
+                    sem_post(sem_sensor_list_writer);
+                }
+                sem_post(sem_sensor_list_reader);
             }
 
         } else { //mensagem sensor
@@ -280,6 +328,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
             printf("WORKER: number of sensors: %d\n", *count_key_data);
 #endif
+            sem_wait(sem_data_base_writer);
+            sem_wait(sem_sensor_list_writer);
             for (i = 0; i < *count_sensors; i++) {
 #ifdef DEBUG
                 printf("SENSOR stored/new: %s\t%s\n",sensor_list[i], sensor_id);
@@ -311,8 +361,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #endif
                     new_key = 0;
                     data_base[i].last_value = value;
-                    data_base[i].average =
-                            (data_base[i].average * data_base[i].n_updates + value) / data_base[i].n_updates + 1;
+                    data_base[i].average = (data_base[i].average * (double)data_base[i].n_updates + (double) value) / (double)(data_base[i].n_updates + 1);
                     data_base[i].n_updates++;
                     if (value > data_base[i].max_value) data_base[i].max_value = value;
                     if (value < data_base[i].min_value) data_base[i].min_value = value;
@@ -345,7 +394,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 sprintf(message_to_log, "Sensor message discarded: %s", message_to_process.cmd);
                 write_to_log(message_to_log);
             }
-
+            sem_post(sem_sensor_list_writer);
+            sem_post(sem_data_base_writer);
 
         }
 
@@ -662,6 +712,9 @@ int main(int argc, char *argv[]) {
     count_key_data = (int *) ((char*)keys_bitmap +   MAX_KEYS * sizeof(int));
     count_alerts = (int *) ((char*)keys_bitmap  + (MAX_KEYS + 1) * sizeof(int));
     count_sensors = (int *) ((char*)keys_bitmap + (MAX_KEYS + 2) * sizeof(int));
+    database_readers = (int *) ((char*)keys_bitmap + (MAX_KEYS + 3) * sizeof(int));
+    alert_readers  = (int *) ((char*)keys_bitmap + (MAX_KEYS + 4) * sizeof(int));
+    sensor_readers = (int *) ((char*)keys_bitmap + (MAX_KEYS + 5) * sizeof(int));
 
 
 
@@ -675,6 +728,9 @@ int main(int argc, char *argv[]) {
     *count_key_data = 0;
     *count_alerts = 0;
     *count_sensors = 0;
+    *database_readers = 0;
+    *alert_readers = 0;
+    *sensor_readers = 0;
 
 
     //cretes unamed semaphores to protect the shared memory
