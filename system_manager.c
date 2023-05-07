@@ -22,6 +22,7 @@
 #include <sys/msg.h>
 #include <sys/wait.h>
 #include <string.h>
+#include <signal.h>
 
 #include "costumio.h"
 #include "internal_queue.h"
@@ -547,10 +548,19 @@ void cleaner(){
 
 }
 
-void handle_worker(){}
-void handle_threads(){}
+void handle_worker(){
+    exit(0);
+}
+void handle_threads(){
+    pthread_exit(NULL);
+}
 void handle_alert_watcher(){}
-void handle_main_process(){}
+void handle_main_process(int signum){
+    //convem blpquear sinais dentro dos handles 
+    pthread_kill(&thread_sensor_reader, SIGUSR1);
+    pthread_kill(&thread_console_reader, SIGUSR1);
+    pthread_kill(&thread_dispatcher, SIGUSR1);
+}
 
 
 
