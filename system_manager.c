@@ -1,6 +1,11 @@
 //José Francisco Branquinho Macedo - 2021221301
 //Miguel Filipe Mota Cruz - 2021219294
 
+
+// ./home_iot config_file.txt
+// ./user_console 123
+// ./sensor 2342 7 TEMP10 1 10
+
 #define DEBUG //remove this line to remove debug messages (...)
 
 
@@ -67,7 +72,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count;
+sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list_reader, *sem_alert_list_writer, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count;
 sem_t internal_queue_count;
 
 InternalQueue *internal_queue_console;
@@ -127,10 +132,11 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
         //read instruction from dispatcher pipe
         read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message));
-        feedback.message_id = message_to_process.message_id;
+
 
 
         if (message_to_process.type == 0) {//mensagem do user
+            feedback.message_id = message_to_process.message_id;
 #ifdef DEBUG
             printf("WORKER: message being processed: %s\n", message_to_process.cmd);
 #endif
@@ -161,7 +167,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     strcpy(new_alert->alert_id, alert_id);
 
                     //TODO: encontrar espaco livre - a partida esta resolvido
-                    memcpy(&alert_list[*count_alerts++], new_alert, sizeof(Alert));
+                    memcpy(&alert_list[*count_alerts], new_alert, sizeof(Alert));
+                    count_alerts+=1;
                     sprintf(feedback.cmd, "OK");
                 } else {
                     sprintf(feedback.cmd, "ERROR");
@@ -184,9 +191,6 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 if (!validated) {
                     sprintf(feedback.cmd, "ERROR");
                 }
-
-
-                //bla bla bla we fucked
                 sprintf(feedback.cmd, "OK");
             } else if (strcmp(main_cmd, "STATS") == 0) {
                 printf("STATS PROCESSING\n");
@@ -254,7 +258,6 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                     printf("WORKER: SENSOR JA EXISTE\n");
 #endif
-
                     new_sensor = 0;
                     break;
                 }
@@ -263,7 +266,6 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("WORKER: MAX SENSORES ATINGIDO\n");
 #endif
-
                 validated = 0;
             }
 #ifdef DEBUG
@@ -317,9 +319,11 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
         }
 
-        workers_bitmap[worker_number] = 1; //1 - esta disponivel
+
         sprintf(message_to_log, "WORKER %d READY", worker_number+1);
         write_to_log(message_to_log);
+        //TODO: signals
+        workers_bitmap[worker_number] = 1; //1 - esta disponivel
         sem_post(sem_free_worker_count);
 
         if(feedback.type == 100)break;
@@ -452,6 +456,7 @@ void *console_reader(){
 //        printf("sem_value: %d\tMax: %d", sem_value, QUEUE_SZ);
         if (internal_queue_size < QUEUE_SZ){
 //            sem_post(&internal_queue_count);
+//TODO: METER ISTO NO MUTEX CV
             insert_internal_queue(internal_queue_console, &console_message);
 #ifdef DEBUG
             printf("console message to queue\n");
@@ -476,7 +481,6 @@ void *dispatcher(){
         while(internal_queue_size==0){
             pthread_cond_wait(&new_message_cv, &int_queue_size_mutex);
         }
-
         pthread_mutex_unlock(&int_queue_size_mutex);
 
         //prende pelo semaforo dos workers
@@ -527,7 +531,8 @@ void cleaner(){
 
     sem_close(sem_data_base_reader); sem_unlink("/sem_data_base_reader");
     sem_close(sem_data_base_writer); sem_unlink("/sem_data_base_writer");
-    sem_close(sem_alert_list); sem_unlink("/sem_alert_list");
+    sem_close(sem_alert_list_reader); sem_unlink("/sem_alert_list_reader");
+    sem_close(sem_alert_list_writer); sem_unlink("/sem_alert_list_writer");
     sem_close(sem_sensor_list_reader); sem_unlink("/sem_sensor_list_reader");
     sem_close(sem_sensor_list_writer); sem_unlink("/sem_sensor_list_writer");
     sem_close(sem_workers_bitmap); sem_unlink("/sem_workers_bitmap");
@@ -541,6 +546,12 @@ void cleaner(){
     shmctl(shmid, IPC_RMID, NULL);
 
 }
+
+void handle_worker(){}
+void handle_threads(){}
+void handle_alert_watcher(){}
+void handle_main_process(){}
+
 
 
 int main(int argc, char *argv[]) {
@@ -629,17 +640,22 @@ int main(int argc, char *argv[]) {
 
     //cretes unamed semaphores to protect the shared memory
     sem_unlink("/sem_data_base_reader");
-    if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+    if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
     sem_unlink("/sem_data_base_writer");
-    if ((sem_data_base_writer = sem_open("/sem_data_base_writer", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+    if ((sem_data_base_writer = sem_open("/sem_data_base_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
-    sem_unlink("/sem_alert_list");
-    if ((sem_alert_list = sem_open("/sem_alert_list", O_CREAT | O_EXCL, 0644, 1)) == SEM_FAILED) {
+    sem_unlink("/sem_alert_list_writer");
+    if ((sem_alert_list_writer = sem_open("/sem_alert_list_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        perror("named semaphore initialization");
+        exit(-1);
+    }
+    sem_unlink("/sem_alert_list_reader");
+    if ((sem_alert_list_reader = sem_open("/sem_alert_list_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
@@ -857,7 +873,12 @@ int main(int argc, char *argv[]) {
 //DONE - cleanup dos semaforos
 
 //trocar unnamed semaphore para variavel de condicao
-//trocar iteradores
-//
+//trocar iteradores - DONE
+
+//sincronizacao
+//testar
+
+
 
 //TODO: Zheeeee?
+//SIGNALS and handles

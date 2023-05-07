@@ -48,6 +48,7 @@ int main(int argc, char *argv[]){
 #ifdef DEBUG
         printf("%s\n", msg);
 #endif
+        //EPIPE
         write(pipe_id, &msg, BUF_SIZE);
         sleep(time_interval);
     }
