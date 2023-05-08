@@ -71,7 +71,11 @@ int main(int argc, char *argv[]){
         printf("%s\n", msg);
 #endif
         //EPIPE
-        write(pipe_id, &msg, BUF_SIZE);
+
+        if (write(pipe_id, &msg, BUF_SIZE)==-1){
+            perror("error writing to pipe");
+            exit(-1);
+        }
         sleep(time_interval);
     }
     return 0;

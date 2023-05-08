@@ -185,7 +185,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     sprintf(feedback.cmd, "ERROR");
                 }
                 sem_post(sem_alert_list_writer);
-                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                    perror("error sending to message queue");
+                    exit(-1);
+                }
 
             } else if (strcmp(main_cmd, "REMOVE_ALERT") == 0) {
                 sscanf(message_to_process.cmd, "%s %s", main_cmd, alert_id);
@@ -214,7 +217,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("%s\n", feedback.cmd);
 #endif
-                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                    perror("error sending to message queue");
+                    exit(-1);
+                }
             } else if (strcmp(main_cmd, "STATS") == 0) {
 
                 //lock leitura
@@ -234,7 +240,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
-                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                    if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                        perror("error sending to message queue");
+                        exit(-1);
+                    }
                     //TODO: return do send
                     //send feedback to msg queue
                 }
@@ -256,7 +265,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("%s\n", feedback.cmd);
 #endif
-                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                    perror("error sending to message queue");
+                    exit(-1);
+                }
                 //send feedback to msg queue
 
 
@@ -274,14 +286,20 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #endif
 
                 sprintf(feedback.cmd, "ID\tKey\tMIN\tMAX");
-                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                    perror("error sending to message queue");
+                    exit(-1);
+                }
                 for (i = 0; i < *count_alerts; ++i) {
                     sprintf(feedback.cmd, "%s %s %d %d", alert_list[i].alert_id, alert_list[i].key,
                             alert_list[i].alert_min, alert_list[i].alert_max);
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
-                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                    if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                        perror("error sending to message queue");
+                        exit(-1);
+                    }
                     //send feedback to msg queue
                 }
 
@@ -304,13 +322,19 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 printf("\n--LISTA DE SENSORES--\n");
 #endif
                 sprintf(feedback.cmd, "ID");
-                msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                    perror("error sending to message queue");
+                    exit(-1);
+                }
                 for (i = 0; i < *count_sensors; ++i) {
                     sprintf(feedback.cmd, "%s", sensor_list[i]);
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
-                    msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
+                    if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
+                        perror("error sending to message queue");
+                        exit(-1);
+                    }
                     //send feedback to msg queue
                 }
                 sem_wait(sem_sensor_list_reader);
@@ -441,7 +465,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         workers_bitmap[worker_number] = 1; //1 - esta disponivel
         sem_post(sem_free_worker_count);
 
-        if(feedback.type == 100)break;
+        if(feedback.type == 100)break; //TODO: TIRAR ISTO
     }
     //fim while
 
@@ -505,7 +529,10 @@ void alerts_watcher_process(){
                     msg_to_send.message_id = alert_list[k].user_console_id;
                     sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
                             alert_list[k].alert_id, alert_list[k].key);
-                    msgsnd(mq_id, &msg_to_send, sizeof(Message)-sizeof(long), 0);
+                    if(msgsnd(mq_id, &msg_to_send, sizeof(Message)-sizeof(long), 0)==-1){
+                        perror("error sending to message queue");
+                        exit(-1);
+                    }
                     //TODO: send message to message queue
                 }
             }
@@ -521,7 +548,11 @@ void *sensor_reader(){
 
     while(1){ //condicao dos pipes
         //read sensor string from pipe
-        read(sensor_pipe_id, sensor_info, STR_SIZE);
+
+        if (read(sensor_pipe_id, sensor_info, STR_SIZE)==-1){
+            perror("error reading from pipe");
+            exit(-1);
+        }
 #ifdef DEBUG
         printf("\n%s\n", sensor_info);
 #endif
@@ -555,12 +586,13 @@ void *sensor_reader(){
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
     Message console_message;
-    int bytes_read;
 
     while (1){
         //read Message struct from pipe
-        bytes_read = read(console_pipe_id, &console_message, sizeof(Message)); //TODO: verificar return read
-
+        if (read(console_pipe_id, &console_message, sizeof(Message))==-1){
+            perror("error reading from pipe");
+            exit(-1);
+        }
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
 #ifdef DEBUG
@@ -573,7 +605,9 @@ void *console_reader(){
         if (internal_queue_size < QUEUE_SZ){
 //            sem_post(&internal_queue_count);
 //TODO: METER ISTO NO MUTEX CV
+//            pthread_mutex_lock(&int_queue_size_mutex);
             insert_internal_queue(internal_queue_console, &console_message);
+//            pthread_mutex_unlock(&int_queue_size_mutex);
 #ifdef DEBUG
             printf("console message to queue\n");
 #endif
@@ -663,18 +697,20 @@ void cleaner(){
 
 }
 
-void handle_worker(){
+
+void handle_worker(int signum){
     exit(0);
 }
-void handle_threads(){
-    pthread_exit(NULL);
+void handle_threads(int signum){
+    if(signum == SIGUSR1)
+        pthread_exit(NULL);
 }
-void handle_alert_watcher(){}
+void handle_alert_watcher(int signum){}
 void handle_main_process(int signum){
     //convem blpquear sinais dentro dos handles 
-    pthread_kill(&thread_sensor_reader, SIGUSR1);
-    pthread_kill(&thread_console_reader, SIGUSR1);
-    pthread_kill(&thread_dispatcher, SIGUSR1);
+    pthread_kill(thread_sensor_reader, SIGUSR1);
+    pthread_kill(thread_console_reader, SIGUSR1);
+    pthread_kill(thread_dispatcher, SIGUSR1);
 }
 
 

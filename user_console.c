@@ -39,7 +39,10 @@ void handler(){
 
 void *read_msq(){
     while (1) {
-        msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0);
+        if(msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0) == -1){
+            perror("error receiving from message queue");
+            exit(-1);
+        }
         if(msg.type == 0){
             printf("\nALERT!\n%s\n", msg.cmd);
         }else{
@@ -177,7 +180,12 @@ int main(int argc, char *argv[]){
             buf[strlen(buf)-1] = '\0';
             string_to_upper(buf);
             strcpy(m.cmd, buf);
-            write(pipe_id, &m, sizeof(Message));
+            if (write(pipe_id, &m, sizeof(Message))==-1){
+//                if(errno == EPIPE)
+                perror("error writing to pipe");
+                exit(-1);
+            }
+
         }
 
 
