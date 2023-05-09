@@ -22,8 +22,30 @@
  ./sensor 0029 1 TEMP29 1 10 &
 */
 
+/*
+ ./sensor 0011 1 TEMP1 1 10 &
+ ./sensor 0012 1 TEMP1 1 10 &
+ ./sensor 0013 1 TEMP1 1 10 &
+ ./sensor 0014 1 TEMP1 1 10 &
+ ./sensor 0015 1 TEMP1 1 10 &
+ ./sensor 0016 1 TEMP1 1 10 &
+ ./sensor 0017 1 TEMP1 1 10 &
+ ./sensor 0018 1 TEMP1 1 10 &
+ ./sensor 0019 1 TEMP1 1 10 &
 
-#define DEBUG //remove this line to remove debug messages (...)
+ ./sensor 0021 1 TEMP1 1 10 &
+ ./sensor 0022 1 TEMP1 1 10 &
+ ./sensor 0023 1 TEMP1 1 10 &
+ ./sensor 0024 1 TEMP1 1 10 &
+ ./sensor 0025 1 TEMP1 1 10 &
+ ./sensor 0026 1 TEMP1 1 10 &
+ ./sensor 0027 1 TEMP1 1 10 &
+ ./sensor 0028 1 TEMP1 1 10 &
+ ./sensor 0029 1 TEMP1 1 10 &
+*/
+
+
+//#define DEBUG //remove this line to remove debug messages (...)
 
 #include <unistd.h> // process
 #include <stdio.h>

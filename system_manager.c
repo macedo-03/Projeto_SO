@@ -232,7 +232,13 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 }
                 sem_post(sem_data_base_reader);
 
-                sprintf(feedback.cmd, "Key\tLast\tMin\tMax\tAvg\tCount");
+
+                if(*count_key_data>0){
+                    sprintf(feedback.cmd, "Key\tLast\tMin\tMax\tAvg\tCount");
+                }
+                else{
+                    sprintf(feedback.cmd, "No Stats");
+                }
                 msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0);
                 for (i = 0; i < *count_key_data; ++i) {
                     sprintf(feedback.cmd, "%s %d %d %d %.2f %d", data_base[i].key, data_base->last_value,
@@ -286,7 +292,12 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 printf("\n--LISTA DE ALERTAS--\n");
 #endif
 
-                sprintf(feedback.cmd, "ID\tKey\tMIN\tMAX");
+                if(*count_alerts>0){
+                    sprintf(feedback.cmd, "ID\tKey\tMIN\tMAX");
+                }
+                else{
+                    sprintf(feedback.cmd, "No Alerts");
+                }
                 if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
                     perror("error sending to message queue");
                     exit(-1);
@@ -322,11 +333,17 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                 printf("\n--LISTA DE SENSORES--\n");
 #endif
-                sprintf(feedback.cmd, "ID");
+                if(*count_sensors>0){
+                    sprintf(feedback.cmd, "ID");
+                }
+                else{
+                    sprintf(feedback.cmd, "No Sensors");
+                }
                 if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
                     perror("error sending to message queue");
                     exit(-1);
                 }
+
                 for (i = 0; i < *count_sensors; ++i) {
                     sprintf(feedback.cmd, "%s", sensor_list[i]);
 #ifdef DEBUG
@@ -377,19 +394,22 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             token = strtok(NULL, "\n");
             my_atoi(token, &value);
 
-//#ifdef DEBUG
+#ifdef DEBUG
             printf("WORKER: MENSAGEM SENSOR: %s %s %d\n", sensor_id, key, value);
-//#endif
+#endif
 
             validated = new_key = new_sensor = 1; //1 - true
 
             //lock escrita
 
 #ifdef DEBUG
-            printf("WORKER: number of sensors: %d\n", *count_key_data);
+            printf("WORKER: number of sensors: %d\n", *count_sensors);
 #endif
             sem_wait(sem_data_base_writer);
+//            printf("WORKER %d passou wait sem_data_base_writer\n", worker_number+1);
             sem_wait(sem_sensor_list_writer);
+//            printf("WORKER %d passou wait sem_sensor_list_writer\n", worker_number+1);
+//            printf("numero de sensores: %d\n", *count_sensors);
             for (i = 0; i < *count_sensors; i++) {
 #ifdef DEBUG
                 printf("SENSOR stored/new: %s\t%s\n",sensor_list[i], sensor_id);
@@ -429,8 +449,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     break;
                 }
             }
-            if (new_key == 1 && validated) { //create key
-                if (*count_key_data < MAX_KEYS) {
+            if (new_key == 1 && validated) {
+                if (*count_key_data < MAX_KEYS) {//create key
 #ifdef DEBUG
                     printf("WORKER: CREATE KEY\n");
 #endif
@@ -443,31 +463,40 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     memcpy(&data_base[*count_key_data], new_key_data, sizeof(key_data));
                     *count_key_data += 1;
                 }
+                else{
+                    validated = 0;
+                }
             }
             if (new_sensor == 1 && validated) {
 #ifdef DEBUG
-                printf("WORKER: CREATE SENSOR\n");
+                printf("WORKER: CREATE SENSOR %d\n", *count_sensors);
 #endif
                 memcpy(sensor_list[*count_sensors], sensor_id, sizeof(char[STR_SIZE]));
-
+                printf("WORKER: NEW SENSOR %d\n",  *count_sensors);
                 *count_sensors+=1;
             } else if (!validated) {
-                sprintf(message_to_log, "Sensor message discarded: %s", message_to_process.cmd);
+                sprintf(message_to_log, "WORKER: Sensor message discarded: %s", message_to_process.cmd);
                 write_to_log(message_to_log);
             }
 
             if(keys_bitmap[i] == 1){ //let alert watcher work
+#ifdef DEBUG
                 printf("WORKER %d is unlocking alerts_watcher\n", worker_number+1);
+#endif
                 sem_post(sem_alert_watcher);
+//                printf("WORKER %d passou post sem_alert_watcher\n", worker_number+1);
                 sem_wait(sem_alert_worker);
+//                printf("WORKER %d passou wait sem_alert_worker\n", worker_number+1);
             }
 
 
+
             sem_post(sem_sensor_list_writer);
+//            printf("WORKER %d passou post sem_sensor_list_writer\n", worker_number+1);
             sem_post(sem_data_base_writer);
+//            printf("WORKER %d passou post sem_data_base_writer\n", worker_number+1);
 
         }
-
 
         sprintf(message_to_log, "WORKER %d READY", worker_number+1);
         write_to_log(message_to_log);
@@ -475,37 +504,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
         workers_bitmap[worker_number] = 1; //1 - esta disponivel
         sem_post(sem_free_worker_count);
 
-        if(feedback.type == 100)break; //TODO: TIRAR ISTO
+//        if(feedback.type == 100)break; //TODO: TIRAR ISTO
     }
     //fim while
-
-    //user console messages -> stats; sensors; list_alerts
-        //when read-only process tries to access shared memory
-//        pthread_mutex_lock(&reader_mutex);
-//        n_readers++;
-//        if(n_readers==1) pthread_mutex_lock(&shm_mutex);
-//        pthread_mutex_unlock(&reader_mutex);
-//
-//        // >> read from shm
-//
-//        pthread_mutex_lock(&reader_mutex);
-//        n_readers--;
-//        if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
-//        pthread_mutex_unlock(&reader_mutex);
-
-
-    //user console messages -> reset; add_alert; remove_alert
-        //when write process tries to access shared memory
-//        pthread_mutex_lock(&shm_mutex);
-//        // >> write to shm
-//        pthread_mutex_unlock(&shm_mutex);
-
-    //LogFile -> write messages to log and screen
-//    pthread_mutex_lock(&log_mutex);
-//    //write messages
-//    printf("Insert message here");
-//    fprintf(log_file, "Insert message here");
-//    pthread_mutex_unlock(&log_mutex);
 
 } //worker_process
 
@@ -513,50 +514,58 @@ void alerts_watcher_process(){
     int j, k;
     write_to_log("PROCESS ALERTS_WATCHER CREATED");
     while (1) {
-//        printf("\nALERT WATCHER WAITING\n");
         sem_wait(sem_alert_watcher);
+//        printf("ALERTWATCHER passou wait sem_alert_watcher\n");
         for (j = 0; j < *count_key_data; ++j) {
-//            printf("\nALERT WATCHER CHECKING\n");
+
             if (keys_bitmap[j] == 1) { //aquela key foi atualizada
                 keys_bitmap[j] = 0;
 
                 sem_wait(sem_alert_list_reader);
+//                printf("ALERTWATCHER passou wait sem_alert_list_reader (1.1)\n");
                 *alert_readers += 1;
                 if (*alert_readers == 1) {
                     sem_wait(sem_alert_list_writer);
+//                    printf("ALERTWATCHER passou wait sem_alert_list_writer\n");
                 }
                 sem_post(sem_alert_list_reader);
-                printf("count_alerts%d\n",*count_alerts);
+//                printf("ALERTWATCHER passou post sem_alert_list_reader (1.2)\n");
                 for (k = 0; k < *count_alerts; ++k) {
+#ifdef DEBUG
                     printf("Value: %d\tKeySensor: %s\tKeyAlert: %s\t Min: %d\tMax: %d\n",data_base[j].last_value, data_base[j].key,  alert_list[k].key, alert_list[k].alert_min, alert_list[k].alert_max);
+#endif
                     if (strcmp(alert_list[k].key, data_base[j].key) == 0 && (data_base[j].last_value < alert_list[k].alert_min ||
                                                                   data_base[j].last_value > alert_list[k].alert_max)) {
-                        printf("ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
-                               alert_list[k].alert_id, alert_list[k].key);
+
                         Message msg_to_send;
                         msg_to_send.type = 0;
                         msg_to_send.message_id = alert_list[k].user_console_id;
-                        sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
-                                alert_list[k].alert_id, alert_list[k].key);
-
+                        sprintf(msg_to_send.cmd, "ALERT!! Alert: '%s' -> value: %d (key: '%s') !!\n",
+                                alert_list[k].alert_id,data_base[j].last_value, alert_list[k].key);
                         if (msgsnd(mq_id, &msg_to_send, sizeof(Message) - sizeof(long), 0) == -1) {
                             perror("error sending to message queue");
                             exit(-1);
                         }
-                        //TODO: send message to message queue
+#ifdef DEBUG
+                        printf("ALERT!! Alert: '%s' -> value: %d (key: '%s') !!\n", alert_list[k].alert_id,data_base[j].last_value, alert_list[k].key);
+#endif
+
                     }
                 }
-
                 sem_wait(sem_alert_list_reader);
+//                printf("ALERTWATCHER passou wait sem_alert_list_reader (1.2)\n");
                 *alert_readers -= 1;
                 if (*alert_readers == 0) {
                     sem_post(sem_alert_list_writer);
+//                    printf("ALERTWATCHER passou post sem_alert_list_writer\n");
                 }
                 sem_post(sem_alert_list_reader);
+//                printf("ALERTWATCHER passou post sem_alert_list_reader (2.2)\n");
             }
 
         }
         sem_post(sem_alert_worker);
+//        printf("ALERTWATCHER passou post sem_alert_worker\n");
     }
 } //alerts_watcher_process
 
@@ -575,7 +584,7 @@ void *sensor_reader(){
             exit(-1);
         }
 //#ifdef DEBUG
-        printf("\n%s\n", sensor_info);
+//        printf("\n%s\n", sensor_info);
 //#endif
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
@@ -586,7 +595,7 @@ void *sensor_reader(){
 
         if(sem_trywait(&internal_queue_empty_count)==-1){ // menos um vazio
             if(errno == EAGAIN){
-                sprintf(message_to_log, "Sensor message discarded: %s", sensor_info);
+                sprintf(message_to_log, "READER: Sensor message discarded: %s", sensor_info);
                 write_to_log(message_to_log);
                 continue;
             }
@@ -695,16 +704,17 @@ void *dispatcher(){
         for (k = 0; k < N_WORKERS; ++k) {
             if(workers_bitmap[k] == 1){
                 workers_bitmap[k] = 0; //mark worker as busy
-                write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
-#ifdef DEBUG
+//#ifdef DEBUG
                 printf("Message dispatched: %s\t worker: %d\n", message_to_dispatch.cmd, k+1);
-#endif
+//#endif
+                write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message));
+
 
                 break;
             }
         }
 
-//        break; // TODO: TIRAR ISTO
+
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
 //        printf("dispatcher mutex unlock\n");
@@ -797,6 +807,7 @@ int main(int argc, char *argv[]) {
         }
         fclose(fp);
     }
+//    printf("%d\n%d\n%d\n%d\n%d\n", QUEUE_SZ,N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS);
 
 
     id_t childpid;
@@ -825,7 +836,7 @@ int main(int argc, char *argv[]) {
     alert_list = (Alert*) ((char*)data_base + MAX_KEYS * sizeof(key_data));     //store alerts
     sensor_list = (char **) ((char*)alert_list + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
     for(i =0; i<MAX_SENSORS;i++){
-        sensor_list[i] = (char *) (sensor_list + MAX_SENSORS * sizeof(char *) + i * sizeof(char[STR_SIZE]));
+        sensor_list[i] = (char *) ((char *)sensor_list + MAX_SENSORS * sizeof(char *) + i * sizeof(char[STR_SIZE]));
     }
     workers_bitmap = (int *) ((char*)sensor_list +  MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]));
     keys_bitmap = (int *) ((char*)workers_bitmap +  N_WORKERS * sizeof(int));
@@ -974,6 +985,14 @@ int main(int argc, char *argv[]) {
         perror("Cannot open or create message queue\n");
         exit(-1);
     }
+
+    //TODO: tirar isto qnd tiver handle
+    msgctl(mq_id, IPC_RMID, NULL);
+    if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
+        perror("Cannot open or create message queue\n");
+        exit(-1);
+    }
+    //
 
 
     //create one unnamed pipe for each worker
