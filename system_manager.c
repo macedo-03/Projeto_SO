@@ -96,6 +96,7 @@ char temp[10];
 
 void get_time(){
 //    printf("timer\n");
+    time(&t);
     time_info = localtime(&t);
     sprintf(temp, "%2d:%2d:%2d", time_info->tm_hour, time_info->tm_min, time_info->tm_sec);
 
@@ -553,9 +554,9 @@ void *sensor_reader(){
             perror("error reading from pipe");
             exit(-1);
         }
-#ifdef DEBUG
+//#ifdef DEBUG
         printf("\n%s\n", sensor_info);
-#endif
+//#endif
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
         sensor_message.message_id = 0;
@@ -694,6 +695,8 @@ void cleaner(){
 
 //    pthread_cond_destroy(&shm_alert_watcher_cv);
     shmctl(shmid, IPC_RMID, NULL);
+
+    //TODO: PIPES
 
 }
 
@@ -889,7 +892,7 @@ int main(int argc, char *argv[]) {
         printf("Error: could not open file %s\n", log_name);
     }
     else{
-        time(&t);
+
 
 //        write_to_log("HOME_IOT SIMULATOR STARTING");
         sem_wait(log_mutex);

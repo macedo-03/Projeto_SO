@@ -53,7 +53,7 @@ int main(int argc, char *argv[]){
                 )){
         printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
         exit(-1);
-    } else if(time_interval<=0 || min_value>=max_value){
+    } else if(time_interval<0 || min_value>=max_value){
         printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
         exit(-1);
     }
