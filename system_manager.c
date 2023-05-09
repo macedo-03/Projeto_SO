@@ -75,7 +75,7 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list_reader, *sem_alert_list_writer, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count, *sem_alert_watcher;
+sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list_reader, *sem_alert_list_writer, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count, *sem_alert_watcher, *sem_alert_worker;
 sem_t internal_queue_full_count, internal_queue_empty_count;
 
 InternalQueue *internal_queue_console;
@@ -459,7 +459,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             if(keys_bitmap[i] == 1){ //let alert watcher work
                 printf("WORKER %d is unlocking alerts_watcher\n", worker_number+1);
                 sem_post(sem_alert_watcher);
-                sem_wait(sem_alert_watcher);
+                sem_wait(sem_alert_worker);
             }
 
 
@@ -511,62 +511,52 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
 void alerts_watcher_process(){
     int j, k;
-    //when read-only process tries to access shared memory
-//        pthread_mutex_lock(&reader_mutex);
-//        n_readers++;
-//        if(n_readers==1) pthread_mutex_lock(&shm_mutex);
-//        pthread_mutex_unlock(&reader_mutex);
-//
-//        // >> read from shm
-//
-//        pthread_mutex_lock(&reader_mutex);
-//        n_readers--;
-//        if(n_readers==0) pthread_mutex_unlock(&shm_mutex);
-//        pthread_mutex_unlock(&reader_mutex);
-
-
     write_to_log("PROCESS ALERTS_WATCHER CREATED");
-
-
-    for (j = 0; j < *count_key_data; ++j) {
-
+    while (1) {
+//        printf("\nALERT WATCHER WAITING\n");
         sem_wait(sem_alert_watcher);
-        printf("\nALERT WATCHER CHECKING\n");
-        if(keys_bitmap[j] == 1) { //aquela key foi atualizada
-            keys_bitmap[j] = 0;
+        for (j = 0; j < *count_key_data; ++j) {
+//            printf("\nALERT WATCHER CHECKING\n");
+            if (keys_bitmap[j] == 1) { //aquela key foi atualizada
+                keys_bitmap[j] = 0;
 
-            sem_wait(sem_alert_list_reader);
-            *alert_readers+=1;
-            if(*alert_readers == 1){
-                sem_wait(sem_alert_list_writer);
-            }
-            sem_post(sem_alert_list_reader);
-
-            for (k = 0; k < *count_alerts; ++k) {
-                if (alert_list[k].key == data_base[j].key && (data_base[j].last_value < alert_list[k].alert_min || data_base[j].last_value > alert_list[k].alert_max )) {
-                    Message msg_to_send;
-                    msg_to_send.type = 0;
-                    msg_to_send.message_id = alert_list[k].user_console_id;
-                    sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
-                            alert_list[k].alert_id, alert_list[k].key);
-                    printf("ALERT!! The Alert '%s', related to the key '%s' was activated!\n", alert_list[k].alert_id, alert_list[k].key);
-                    if(msgsnd(mq_id, &msg_to_send, sizeof(Message)-sizeof(long), 0)==-1){
-                        perror("error sending to message queue");
-                        exit(-1);
-                    }
-                    //TODO: send message to message queue
+                sem_wait(sem_alert_list_reader);
+                *alert_readers += 1;
+                if (*alert_readers == 1) {
+                    sem_wait(sem_alert_list_writer);
                 }
+                sem_post(sem_alert_list_reader);
+                printf("count_alerts%d\n",*count_alerts);
+                for (k = 0; k < *count_alerts; ++k) {
+                    printf("Value: %d\tKeySensor: %s\tKeyAlert: %s\t Min: %d\tMax: %d\n",data_base[j].last_value, data_base[j].key,  alert_list[k].key, alert_list[k].alert_min, alert_list[k].alert_max);
+                    if (strcmp(alert_list[k].key, data_base[j].key) == 0 && (data_base[j].last_value < alert_list[k].alert_min ||
+                                                                  data_base[j].last_value > alert_list[k].alert_max)) {
+                        printf("ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
+                               alert_list[k].alert_id, alert_list[k].key);
+                        Message msg_to_send;
+                        msg_to_send.type = 0;
+                        msg_to_send.message_id = alert_list[k].user_console_id;
+                        sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
+                                alert_list[k].alert_id, alert_list[k].key);
+
+                        if (msgsnd(mq_id, &msg_to_send, sizeof(Message) - sizeof(long), 0) == -1) {
+                            perror("error sending to message queue");
+                            exit(-1);
+                        }
+                        //TODO: send message to message queue
+                    }
+                }
+
+                sem_wait(sem_alert_list_reader);
+                *alert_readers -= 1;
+                if (*alert_readers == 0) {
+                    sem_post(sem_alert_list_writer);
+                }
+                sem_post(sem_alert_list_reader);
             }
 
-            sem_wait(sem_alert_list_reader);
-            *alert_readers-=1;
-            if(*alert_readers == 0){
-                sem_post(sem_alert_list_writer);
-            }
-            sem_post(sem_alert_list_reader);
         }
-
-        sem_post(sem_alert_watcher);
+        sem_post(sem_alert_worker);
     }
 } //alerts_watcher_process
 
@@ -916,6 +906,11 @@ int main(int argc, char *argv[]) {
     }
     sem_unlink("/sem_alert_watcher");
     if ((sem_alert_watcher = sem_open("/sem_alert_watcher", O_CREAT | O_EXCL, 0777, 0)) == SEM_FAILED) {
+        perror("named semaphore initialization");
+        exit(-1);
+    }
+    sem_unlink("/sem_alert_worker");
+    if ((sem_alert_worker = sem_open("/sem_alert_worker", O_CREAT | O_EXCL, 0777, 0)) == SEM_FAILED) {
         perror("named semaphore initialization");
         exit(-1);
     }
