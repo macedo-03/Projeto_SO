@@ -75,8 +75,8 @@ int **disp_work_pipe;
 int mq_id;
 FILE *log_file;
 
-sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list_reader, *sem_alert_list_writer, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count;
-sem_t internal_queue_count;
+sem_t *sem_data_base_reader, *sem_data_base_writer, *sem_alert_list_reader, *sem_alert_list_writer, *sem_sensor_list_reader, *sem_sensor_list_writer, *sem_workers_bitmap, *sem_keys_bitmap, *log_mutex, *sem_free_worker_count, *sem_alert_watcher;
+sem_t internal_queue_full_count, internal_queue_empty_count;
 
 InternalQueue *internal_queue_console;
 InternalQueue *internal_queue_sensor;
@@ -377,9 +377,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
             token = strtok(NULL, "\n");
             my_atoi(token, &value);
 
-#ifdef DEBUG
+//#ifdef DEBUG
             printf("WORKER: MENSAGEM SENSOR: %s %s %d\n", sensor_id, key, value);
-#endif
+//#endif
 
             validated = new_key = new_sensor = 1; //1 - true
 
@@ -425,6 +425,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     data_base[i].n_updates++;
                     if (value > data_base[i].max_value) data_base[i].max_value = value;
                     if (value < data_base[i].min_value) data_base[i].min_value = value;
+                    keys_bitmap[i] = 1;
                     break;
                 }
             }
@@ -438,7 +439,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                     new_key_data->last_value = new_key_data->min_value = new_key_data->max_value = value;
                     new_key_data->average = (double) value;
                     new_key_data->n_updates = 1;
-
+                    keys_bitmap[i] = 1;
                     memcpy(&data_base[*count_key_data], new_key_data, sizeof(key_data));
                     *count_key_data += 1;
                 }
@@ -454,6 +455,14 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 sprintf(message_to_log, "Sensor message discarded: %s", message_to_process.cmd);
                 write_to_log(message_to_log);
             }
+
+            if(keys_bitmap[i] == 1){ //let alert watcher work
+                printf("WORKER %d is unlocking alerts_watcher\n", worker_number+1);
+                sem_post(sem_alert_watcher);
+                sem_wait(sem_alert_watcher);
+            }
+
+
             sem_post(sem_sensor_list_writer);
             sem_post(sem_data_base_writer);
 
@@ -521,8 +530,18 @@ void alerts_watcher_process(){
 
     for (j = 0; j < *count_key_data; ++j) {
 
+        sem_wait(sem_alert_watcher);
+        printf("\nALERT WATCHER CHECKING\n");
         if(keys_bitmap[j] == 1) { //aquela key foi atualizada
             keys_bitmap[j] = 0;
+
+            sem_wait(sem_alert_list_reader);
+            *alert_readers+=1;
+            if(*alert_readers == 1){
+                sem_wait(sem_alert_list_writer);
+            }
+            sem_post(sem_alert_list_reader);
+
             for (k = 0; k < *count_alerts; ++k) {
                 if (alert_list[k].key == data_base[j].key && (data_base[j].last_value < alert_list[k].alert_min || data_base[j].last_value > alert_list[k].alert_max )) {
                     Message msg_to_send;
@@ -530,6 +549,7 @@ void alerts_watcher_process(){
                     msg_to_send.message_id = alert_list[k].user_console_id;
                     sprintf(msg_to_send.cmd, "ALERT!! The Alert '%s', related to the key '%s' was activated!\n",
                             alert_list[k].alert_id, alert_list[k].key);
+                    printf("ALERT!! The Alert '%s', related to the key '%s' was activated!\n", alert_list[k].alert_id, alert_list[k].key);
                     if(msgsnd(mq_id, &msg_to_send, sizeof(Message)-sizeof(long), 0)==-1){
                         perror("error sending to message queue");
                         exit(-1);
@@ -537,7 +557,16 @@ void alerts_watcher_process(){
                     //TODO: send message to message queue
                 }
             }
+
+            sem_wait(sem_alert_list_reader);
+            *alert_readers-=1;
+            if(*alert_readers == 0){
+                sem_post(sem_alert_list_writer);
+            }
+            sem_post(sem_alert_list_reader);
         }
+
+        sem_post(sem_alert_watcher);
     }
 } //alerts_watcher_process
 
@@ -546,6 +575,7 @@ void *sensor_reader(){
     Message sensor_message;
     char sensor_info[STR_SIZE];
     int sem_value;
+    char message_to_log[BUF_SIZE];
 
     while(1){ //condicao dos pipes
         //read sensor string from pipe
@@ -562,24 +592,34 @@ void *sensor_reader(){
         sensor_message.message_id = 0;
         strcpy(sensor_message.cmd, sensor_info);
 
+
+
+        if(sem_trywait(&internal_queue_empty_count)==-1){ // menos um vazio
+            if(errno == EAGAIN){
+                sprintf(message_to_log, "Sensor message discarded: %s", sensor_info);
+                write_to_log(message_to_log);
+                continue;
+            }
+            else{
+                perror("error with internal queue synchronization");
+                exit(-1);
+            }
+        }
+
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
-//        //get_value of semaphore. if internal queue is full -> continue;
-//        sem_getvalue(&internal_queue_count, &sem_value);
-        //semaphore
-        if (internal_queue_size < QUEUE_SZ){
-//            sem_post(&internal_queue_count);
-            insert_internal_queue(internal_queue_sensor, &sensor_message);
-            pthread_cond_signal(&new_message_cv);
+
+        insert_internal_queue(internal_queue_sensor, &sensor_message);
+        sem_post(&internal_queue_full_count); // mais um cheio
+//        pthread_cond_signal(&new_message_cv);
+
 #ifdef DEBUG
             printf("sensor message to queue\n");
 #endif
-        }
+
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
-
     }
-
 
     pthread_exit(NULL);
 } // sensor_reader
@@ -587,65 +627,78 @@ void *sensor_reader(){
 void *console_reader(){
     write_to_log("THREAD CONSOLE_READER CREATED");
     Message console_message;
-
+    int temporario;
     while (1){
         //read Message struct from pipe
         if (read(console_pipe_id, &console_message, sizeof(Message))==-1){
             perror("error reading from pipe");
             exit(-1);
         }
-        //lock internal queue
-        pthread_mutex_lock(&internal_queue_mutex);
+
 #ifdef DEBUG
         printf("\nmessage received: %s\n", console_message.cmd);
 #endif
-        //get_value of semaphore. if internal queue is full -> continue;
-//        sem_getvalue(&internal_queue_count, &sem_value);
-//        //semaphore
-//        printf("sem_value: %d\tMax: %d", sem_value, QUEUE_SZ);
-        if (internal_queue_size < QUEUE_SZ){
-//            sem_post(&internal_queue_count);
-//TODO: METER ISTO NO MUTEX CV
-//            pthread_mutex_lock(&int_queue_size_mutex);
-            insert_internal_queue(internal_queue_console, &console_message);
+
+        sem_wait(&internal_queue_empty_count); // menos um vazio
+//        sem_getvalue(&internal_queue_empty_count, &temporario);
+//        printf("Console EMPTY: %d\n", temporario);
+        //lock internal queue
+        pthread_mutex_lock(&internal_queue_mutex);
+//        printf("console mutex lock\n");
+        insert_internal_queue(internal_queue_console, &console_message);
+
+        sem_post(&internal_queue_full_count); // mais um cheio
+//        sem_getvalue(&internal_queue_full_count, &temporario);
+//        printf("console FULL: %d\n", temporario);
 //            pthread_mutex_unlock(&int_queue_size_mutex);
 #ifdef DEBUG
             printf("console message to queue\n");
 #endif
-            pthread_cond_signal(&new_message_cv);
 
-        }
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
+//        printf("console mutex unlock\n");
     }
     pthread_exit(NULL);
 } //console_reader
 
 void *dispatcher(){
     int k;
-
+    int temporario;
     write_to_log("THREAD DISPATCHER CREATED");
 
 
     while(1){
-        pthread_mutex_lock(&int_queue_size_mutex);
-        while(internal_queue_size==0){
-            pthread_cond_wait(&new_message_cv, &int_queue_size_mutex);
-        }
-        pthread_mutex_unlock(&int_queue_size_mutex);
+//        pthread_mutex_lock(&int_queue_size_mutex);
+//        while(internal_queue_size==0){
+//            pthread_cond_wait(&new_message_cv, &int_queue_size_mutex);
+//        }
+//        pthread_mutex_unlock(&int_queue_size_mutex);
 
+        sem_wait(&internal_queue_full_count); // menos um cheio
+//        sem_getvalue(&internal_queue_full_count, &temporario);
+//        printf("dispatcher FULL: %d\n", temporario);
+
+
+//        sem_getvalue(sem_free_worker_count, &temporario);
+//        printf("dispatcher FREE_WORKERS: %d\n", temporario);
         //prende pelo semaforo dos workers
         sem_wait(sem_free_worker_count);
 
+
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
+//        printf("dispatcher mutex lock\n");
 //        //prende pelo semaforo da internal queue
-//        sem_wait(&internal_queue_count);
+//        sem_wait(&internal_queue_full_count);
         //executa codigo em baixo
 #ifdef DEBUG
         printf("internal queue size before = %d\n", internal_queue_size);
 #endif
         Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
+        sem_post(&internal_queue_empty_count); // // mais um vazio
+//        sem_getvalue(&internal_queue_empty_count, &temporario);
+//        printf("dispatcher EMPTY: %d\n", temporario);
 #ifdef DEBUG
         printf("internal queue size after = %d\n", internal_queue_size);
 #endif
@@ -661,8 +714,10 @@ void *dispatcher(){
             }
         }
 
+//        break; // TODO: TIRAR ISTO
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
+//        printf("dispatcher mutex unlock\n");
     }
     //dispatch the next message
     //get next message
@@ -691,7 +746,7 @@ void cleaner(){
     sem_close(log_mutex); sem_unlink("/log_mutex");
     sem_close(sem_free_worker_count); sem_unlink("/sem_free_worker_count");
 
-    sem_destroy(&internal_queue_count); //TODO: mantemos isto? deprecated
+    sem_destroy(&internal_queue_full_count); //TODO: mantemos isto? deprecated
 
 //    pthread_cond_destroy(&shm_alert_watcher_cv);
     shmctl(shmid, IPC_RMID, NULL);
@@ -808,7 +863,7 @@ int main(int argc, char *argv[]) {
     *sensor_readers = 0;
 
 
-    //cretes unamed semaphores to protect the shared memory
+    //cretes named semaphores to protect the shared memory
     sem_unlink("/sem_data_base_reader");
     if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
@@ -859,7 +914,16 @@ int main(int argc, char *argv[]) {
         perror("named semaphore initialization");
         exit(-1);
     }
-    if (sem_init(&internal_queue_count, 0, 0) < 0) {
+    sem_unlink("/sem_alert_watcher");
+    if ((sem_alert_watcher = sem_open("/sem_alert_watcher", O_CREAT | O_EXCL, 0777, 0)) == SEM_FAILED) {
+        perror("named semaphore initialization");
+        exit(-1);
+    }
+    if (sem_init(&internal_queue_full_count, 0, 0) < 0) {
+        perror("unnamed semaphore initialization");
+        exit(-1);
+    }
+    if (sem_init(&internal_queue_empty_count, 0, QUEUE_SZ) < 0) {
         perror("unnamed semaphore initialization");
         exit(-1);
     }
