@@ -51,17 +51,10 @@ typedef struct
 
 
 
-//pthread_mutex_t shm_update_mutex = PTHREAD_MUTEX_INITIALIZER; //protects shm access -> no read or write; pairs with shm_alert_watcher_cv
-//pthread_mutex_t reader_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable n_readers -> no read or write
-////pthread_mutex_t log_mutex = PTHREAD_MUTEX_INITIALIZER; //protects log file access
-//
-//pthread_mutex_t sensors_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_sensors
-//pthread_mutex_t alerts_counter_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to count_alerts
-
 pthread_mutex_t internal_queue_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to internal queue
 
-pthread_mutex_t int_queue_size_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable internal_queue_size -> no read or write
-pthread_cond_t new_message_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
+//pthread_mutex_t int_queue_size_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable internal_queue_size -> no read or write
+//pthread_cond_t new_message_cv = PTHREAD_COND_INITIALIZER; //Alert alert_watcher that the shm has been updated
 
 pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 
@@ -583,9 +576,9 @@ void *sensor_reader(){
             perror("error reading from pipe");
             exit(-1);
         }
-//#ifdef DEBUG
+#ifdef DEBUG
 //        printf("\n%s\n", sensor_info);
-//#endif
+#endif
         //sensor_message = malloc(sizeof(Message));
         sensor_message.type=1;
         sensor_message.message_id = 0;
@@ -730,10 +723,7 @@ void *dispatcher(){
 
 
 void cleaner(){
-//    pthread_mutex_destroy(&shm_update_mutex);
-//    pthread_mutex_destroy(&reader_mutex);
-//    pthread_mutex_destroy(&sensors_counter_mutex);
-//    pthread_mutex_destroy(&alerts_counter_mutex);
+
 
     sem_close(sem_data_base_reader); sem_unlink("/sem_data_base_reader");
     sem_close(sem_data_base_writer); sem_unlink("/sem_data_base_writer");
@@ -746,9 +736,15 @@ void cleaner(){
     sem_close(log_mutex); sem_unlink("/log_mutex");
     sem_close(sem_free_worker_count); sem_unlink("/sem_free_worker_count");
 
-    sem_destroy(&internal_queue_full_count); //TODO: mantemos isto? deprecated
+    sem_close(sem_alert_watcher); sem_unlink("/sem_alert_watcher");
+    sem_close(sem_alert_worker); sem_unlink("/sem_alert_worker");
 
+    sem_destroy(&internal_queue_full_count); //TODO: mantemos isto? deprecated
+    sem_destroy(&internal_queue_empty_count);
+
+    pthread_mutex_destroy(&internal_queue_mutex);
 //    pthread_cond_destroy(&shm_alert_watcher_cv);
+
     shmctl(shmid, IPC_RMID, NULL);
 
     //TODO: PIPES
