@@ -47,11 +47,8 @@
 
 //#define DEBUG //remove this line to remove debug messages (...)
 
-//} else if(signum == SIGTSTP){
-//printf("N. Messages = %lld\n" , n_messages);
-//}
 
-#include <unistd.h> // process
+#include <unistd.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
@@ -66,6 +63,7 @@ long long n_messages;
 struct sigaction action;
 sigset_t block_extra_set;
 
+//function to handle signals
 void handler(int signum){
     if(signum == SIGTSTP){
         printf("\nMessages Counter = %lld\n" , n_messages);
@@ -78,10 +76,10 @@ void handler(int signum){
 
 
 int main(int argc, char *argv[]){
-//        char sensor_id[], int interval, char key[],  int min, int max){
+
     int time_interval, min_value, max_value;
 
-    //validacao dos argumentos
+    //verify program arguments
     if (argc != 6) {
         printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
         exit(-1);
@@ -100,47 +98,52 @@ int main(int argc, char *argv[]){
     }
 
 
-
+    //block all signals except SIGINT and SIGTSTP
     action.sa_flags=0;
     sigfillset(&action.sa_mask);
     sigdelset(&action.sa_mask, SIGINT);
     sigdelset(&action.sa_mask, SIGTSTP);
-
     sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
-
+    //set sigset_t with SIGTSTP
     sigemptyset(&block_extra_set);
     sigaddset(&block_extra_set, SIGTSTP);
 
+
+    //ignore SIGINT and SIGTSTP during setup
     action.sa_handler = SIG_IGN;
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTSTP, &action, NULL);
 
+    //set handler() has the handler function
+    action.sa_handler = handler;
 
-    //abrir sensor para leitura
+    //open pipe to write
     if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
             perror("Cannot open pipe for writing!\n");
             exit(-1); 
     }
     srand(getpid());
 
-    //define handler function to use after setup
-    action.sa_handler = handler;
+    //redirects to handler() when SIGINT or SIGTSTP is received
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTSTP, &action, NULL);
 
 
     char msg[BUF_SIZE];
     while(1){
-        sprintf(msg, "%s#%s#%d", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value);
+        sprintf(msg, "%s#%s#%d", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value); //generate random value to send to system_manager
 #ifdef DEBUG
         printf("%s\n", msg);
 #endif
+        //block SIGTSTP
         sigprocmask(SIG_BLOCK, &block_extra_set, NULL);
+        //write sensor info to pipe
         if (write(pipe_id, &msg, BUF_SIZE)==-1){
             close(pipe_id);
             perror("error writing to pipe");
             exit(-1);
         }
+        //unblock SIGTSTP
         sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
         n_messages++;
         sleep(time_interval);

@@ -35,7 +35,7 @@ Message msg;
 struct sigaction action;
 sigset_t block_extra_set;
 
-
+//function to clean resources and terminate program
 void clean(){
     pthread_kill(mq_reader, SIGUSR1);
     pthread_join(mq_reader, NULL);
@@ -43,28 +43,30 @@ void clean(){
     close(pipe_id);
 }
 
+//function to handle signals
 void handler(int signum){
-    if(signum == SIGUSR1){
+    if(signum == SIGUSR1){ //thread
         pthread_exit(NULL);
     }
-    else if(signum == SIGINT) {
+    else if(signum == SIGINT) { //main_process
         clean();
         exit(0);
     }
 }
 
 
-
+//function for read_msq thread
 void *read_msq(){
     while (1) {
+        //receive message from message queue and print to screen
         if(msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0) == -1){
             perror("error receiving from message queue");
             close(pipe_id);
             exit(-1);
         }
-        if(msg.type == 0){
+        if(msg.type == 0){ //alert
             printf("\n%s\n", msg.cmd);
-        }else{
+        }else{ //feedback
             printf("%s\n", msg.cmd);
         }
 
@@ -74,46 +76,47 @@ void *read_msq(){
 }
 
 int main(int argc, char *argv[]){
+    //verify program arguments
     if (argc != 2) {
         printf("user_console {console id}\n");
         exit(-1);
     }
-
     else if((int) strlen(argv[1]) != 3 && !convert_int(argv[1], NULL)){ // console id
         printf("user_console {console id}\n");
         exit(-1);
     }
 
-
     char buf[BUF_SIZE], cmd[64], alert_id[32], key[32];
     char str_min[16], str_max[16];
     int min, max;
 
+    //block all signals except SIGINT and SIGUSR1
     action.sa_flags=0;
     sigfillset(&action.sa_mask);
     sigdelset(&action.sa_mask, SIGINT);
     sigdelset(&action.sa_mask, SIGUSR1);
     sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
 
-    action.sa_handler = SIG_IGN;
-    sigaction(SIGINT, &action, NULL);
-    sigaction(SIGUSR1, &action, NULL);
-
+    //set sigset_t with SIGUSR1 and SIGINT
     sigemptyset(&block_extra_set);
     sigaddset(&block_extra_set, SIGINT);
     sigaddset(&block_extra_set, SIGUSR1);
 
+    //ignore SIGINT and SIGUSR1 during setup
+    action.sa_handler = SIG_IGN;
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGUSR1, &action, NULL);
 
-    //define handler function to use after setup
+    //set handler() has the handler function
     action.sa_handler = handler;
 
-    //abrir a message queue
+    //open message queue
     if ((mq_id = msgget(MQ_KEY, 0777)) < 0) {
         perror("Cannot open message queue!\n");
         exit(-1);
     }
 
-    //abrir pipe para escrita
+    //open pipe to write
     if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
             perror("Cannot open pipe for writing!\n");
             exit(-1);
@@ -122,6 +125,7 @@ int main(int argc, char *argv[]){
 
     id = getpid();
 
+    //create thread to receive messages from message queue
     if(pthread_create(&mq_reader, NULL, read_msq, NULL)!=0){
         perror("Cannot create thread\n");
         close(pipe_id);
@@ -129,31 +133,29 @@ int main(int argc, char *argv[]){
     }
 
     Message m;
+    //message id = process id
     m.message_id = id;
     m.type = 0;
 
+    //redirects to handler() when SIGINT or SIGUSR1 is received
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGUSR1, &action, NULL);
 
-
+    //commands menu
     printf("Menu:\n"
            "- exit\n"
-           "- stats\n"      //sem_data_base_writer  sem_data_base_reader    (READ)
-           "- reset\n"      //sem_data_base_writer  sem_data_base_reader    (WRITE)
-           "- sensors\n"    //sem_sensor_list_writer    sem_sensor_list_reader  (READ)
-           "- add_alert [id] [chave] [min] [max]\n" //sem_alert_list_writer     sem_alert_list_reader   (WRITE)
-           "- remove_alert [id]\n"  //sem_alert_list_writer     sem_alert_list_reader   (WRITE)
-           "- list_alerts\n\n");    //sem_alert_list_writer     sem_alert_list_reader   (READ)
-           //sensor count_sensor    //sem_sensor_list_writer    sem_sensor_list_reader  //sem_data_base_writer  (WRITE)
-           //alert watcher          //sem_alert_list_writer     sem_alert_list_reader   (READ)
-
+           "- stats\n"
+           "- reset\n"
+           "- sensors\n"
+           "- add_alert [id] [chave] [min] [max]\n"
+           "- remove_alert [id]\n"
+           "- list_alerts\n\n");
 
     fgets(buf, BUF_SIZE, stdin);
     sscanf(buf, "%s", cmd);
     if(!input_str(cmd, 1)){
         printf("Erro de formatacao do comando\n");
     }
-
 
     while (strcmp(cmd, "EXIT")!=0){
         sigprocmask(SIG_BLOCK, &block_extra_set, NULL);
@@ -213,9 +215,7 @@ int main(int argc, char *argv[]){
         else{
             printf("Comando nao reconhecido\n");
             valido = 0;
-            //exit(-1);
         }
-
         if (valido) {
 
 #ifdef DEBUG
@@ -224,29 +224,23 @@ int main(int argc, char *argv[]){
             buf[strlen(buf)-1] = '\0';
             string_to_upper(buf);
             strcpy(m.cmd, buf);
+            //write user message to pipe
             if (write(pipe_id, &m, sizeof(Message))==-1){
                 clean();
                 perror("error writing to pipe");
                 exit(-1);
             }
-
-
         }
+        //unblock SIGINT and SIGUSR1
         sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
 
         fgets(buf, BUF_SIZE, stdin);
         sscanf(buf, "%s", cmd);
         if(!input_str(cmd, 1)){
             printf("Erro de formatacao do Comando\n");
-//            exit(-1);
         }
 
     }
-
-//    send "exit" to system_manager
-//    strcpy(m.cmd, cmd);
-//    write(pipe_id, &m, sizeof(Message));
-
     return 0;
 }
 
