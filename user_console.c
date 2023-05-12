@@ -59,6 +59,7 @@ void *read_msq(){
     while (1) {
         if(msgrcv(mq_id, &msg, sizeof(Message) - sizeof(long), id, 0) == -1){
             perror("error receiving from message queue");
+            close(pipe_id);
             exit(-1);
         }
         if(msg.type == 0){

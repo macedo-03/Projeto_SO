@@ -113,8 +113,8 @@ void write_to_log(char *message_to_log){
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     int i, j;
     worker_index = worker_number;
-    //TODO: close pipes
-    for ( i = 0; i <N_WORKERS; ++i) { //close pipes not being used in this process
+
+    for ( i = 0; i <N_WORKERS; ++i) { //close pipes not being used by this worker
         if(i != worker_number){
             close(disp_work_pipe[i][0]);
             close(disp_work_pipe[i][1]);
@@ -150,9 +150,9 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
 
     //while(1)
-    while (1) { //TODO: trocar read para <1
+    while (1) {
         //read instruction from dispatcher pipe
-        if(read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message)) == -1){
+        if(read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message)) < 1){
             perror("WORKER READING FROM PIPE");
             exit(0);
         }
@@ -270,12 +270,12 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 #ifdef DEBUG
                     printf("%s\n", feedback.cmd);
 #endif
+                    //send feedback to msg queue
                     if(msgsnd(mq_id, &feedback, sizeof(Message)-sizeof(long), 0)==-1){
                         perror("error sending to message queue");
                         exit(-1);
                     }
-                    //TODO: return do send
-                    //send feedback to msg queue
+
                 }
                 sem_wait(sem_data_base_reader);
                 *database_readers-=1;
@@ -423,16 +423,12 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
             validated = new_key = new_sensor = 1; //1 - true
 
-            //lock escrita
 
 #ifdef DEBUG
             printf("WORKER: number of sensors: %d\n", *count_sensors);
 #endif
             sem_wait(sem_data_base_writer);
-//            printf("WORKER %d passou wait sem_data_base_writer\n", worker_number+1);
             sem_wait(sem_sensor_list_writer);
-//            printf("WORKER %d passou wait sem_sensor_list_writer\n", worker_number+1);
-//            printf("numero de sensores: %d\n", *count_sensors);
             for (i = 0; i < *count_sensors; i++) {
 #ifdef DEBUG
                 printf("SENSOR stored/new: %s\t%s\n",sensor_list[i], sensor_id);
@@ -507,29 +503,25 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
                 printf("WORKER %d is unlocking alerts_watcher\n", worker_number+1);
 #endif
                 sem_post(sem_alert_watcher);
-//                printf("WORKER %d passou post sem_alert_watcher\n", worker_number+1);
                 sem_wait(sem_alert_worker);
-//                printf("WORKER %d passou wait sem_alert_worker\n", worker_number+1);
+
             }
 
-
-
             sem_post(sem_sensor_list_writer);
-//            printf("WORKER %d passou post sem_sensor_list_writer\n", worker_number+1);
             sem_post(sem_data_base_writer);
-//            printf("WORKER %d passou post sem_data_base_writer\n", worker_number+1);
+
 
         }
 
         sprintf(message_to_log, "WORKER %d READY", worker_number+1);
         write_to_log(message_to_log);
-        //TODO: signals
+
         workers_bitmap[worker_number] = 1; //1 - esta disponivel
         sem_post(sem_free_worker_count);
         sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
 
 
-//        if(feedback.type == 100)break; //TODO: TIRAR ISTO
+
     }
     //fim while
 
@@ -553,21 +545,20 @@ void alerts_watcher_process(){
         sem_wait(sem_alert_watcher);
         sigprocmask(SIG_BLOCK, &block_extra_set, NULL);
 
-//        printf("ALERTWATCHER passou wait sem_alert_watcher\n");
+
         for (j = 0; j < *count_key_data; ++j) {
 
             if (keys_bitmap[j] == 1) { //aquela key foi atualizada
                 keys_bitmap[j] = 0;
 
                 sem_wait(sem_alert_list_reader);
-//                printf("ALERTWATCHER passou wait sem_alert_list_reader (1.1)\n");
+
                 *alert_readers += 1;
                 if (*alert_readers == 1) {
                     sem_wait(sem_alert_list_writer);
-//                    printf("ALERTWATCHER passou wait sem_alert_list_writer\n");
+
                 }
                 sem_post(sem_alert_list_reader);
-//                printf("ALERTWATCHER passou post sem_alert_list_reader (1.2)\n");
                 for (k = 0; k < *count_alerts; ++k) {
 #ifdef DEBUG
                     printf("Value: %d\tKeySensor: %s\tKeyAlert: %s\t Min: %d\tMax: %d\n",data_base[j].last_value, data_base[j].key,  alert_list[k].key, alert_list[k].alert_min, alert_list[k].alert_max);
@@ -587,23 +578,18 @@ void alerts_watcher_process(){
 #ifdef DEBUG
                         printf("ALERT!! Alert: '%s' -> value: %d (key: '%s') !!\n", alert_list[k].alert_id,data_base[j].last_value, alert_list[k].key);
 #endif
-
                     }
                 }
                 sem_wait(sem_alert_list_reader);
-//                printf("ALERTWATCHER passou wait sem_alert_list_reader (1.2)\n");
                 *alert_readers -= 1;
                 if (*alert_readers == 0) {
                     sem_post(sem_alert_list_writer);
-//                    printf("ALERTWATCHER passou post sem_alert_list_writer\n");
                 }
                 sem_post(sem_alert_list_reader);
-//                printf("ALERTWATCHER passou post sem_alert_list_reader (2.2)\n");
             }
 
         }
         sem_post(sem_alert_worker);
-//        printf("ALERTWATCHER passou post sem_alert_worker\n");
         sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
     }
 } //alerts_watcher_process
@@ -618,7 +604,7 @@ void *sensor_reader(){
     while(1){ //condicao dos pipes
         //read sensor string from pipe
 
-        if (read(sensor_pipe_id, sensor_info, STR_SIZE)==-1){
+        if (read(sensor_pipe_id, sensor_info, STR_SIZE)<1){
             perror("error reading from pipe");
             exit(-1);
         }
@@ -668,7 +654,7 @@ void *console_reader(){
 //    int temporario;
     while (1){
         //read Message struct from pipe
-        if (read(console_pipe_id, &console_message, sizeof(Message))==-1){
+        if (read(console_pipe_id, &console_message, sizeof(Message))<1){
             perror("error reading from pipe");
             exit(-1);
         }
@@ -676,26 +662,17 @@ void *console_reader(){
 #ifdef DEBUG
         printf("\nmessage received: %s\n", console_message.cmd);
 #endif
-
         sem_wait(&internal_queue_empty_count); // menos um vazio
-//        sem_getvalue(&internal_queue_empty_count, &temporario);
-//        printf("Console EMPTY: %d\n", temporario);
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
-//        printf("console mutex lock\n");
         insert_internal_queue(internal_queue_console, &console_message);
-
         sem_post(&internal_queue_full_count); // mais um cheio
-//        sem_getvalue(&internal_queue_full_count, &temporario);
-//        printf("console FULL: %d\n", temporario);
-//            pthread_mutex_unlock(&int_queue_size_mutex);
 #ifdef DEBUG
             printf("console message to queue\n");
 #endif
 
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
-//        printf("console mutex unlock\n");
     }
     pthread_exit(NULL);
 } //console_reader
@@ -746,7 +723,6 @@ void *dispatcher(){
 
         //unlock internal queue
         pthread_mutex_unlock(&internal_queue_mutex);
-//        printf("dispatcher mutex unlock\n");
     }
     //dispatch the next message
     //get next message
@@ -814,7 +790,7 @@ void cleaner(){
     }
 
 
-    //TODO: PIPES
+
 
 }
 
@@ -822,37 +798,34 @@ void cleaner(){
 void error_cleaner(){
     sigfillset(&block_extra_set);
     sigprocmask(SIG_SETMASK, &block_extra_set, NULL);
+#ifdef DEBUG
     printf("ERROR CLEANER\n");
+#endif
     if(thread_count>=1){
+#ifdef DEBUG
         printf("KILL THREAD 1\n");
+#endif
         pthread_kill(thread_console_reader, SIGUSR1);
         pthread_join(thread_console_reader, NULL);
     }
     if(thread_count>=2){
+#ifdef DEBUG
         printf("KILL THREAD 2\n");
+#endif
         pthread_kill(thread_sensor_reader, SIGUSR1);
         pthread_join(thread_sensor_reader, NULL);
     }
     if(thread_count==3){
+#ifdef DEBUG
         printf("KILL THREAD 3\n");
+#endif
         pthread_kill(thread_dispatcher, SIGUSR1);
         pthread_join(thread_dispatcher, NULL);
     }
 
 
-
     int i;
-//    if(worker_count>0){
-//        int wait_creation=0;
-//        while (wait_creation==0){
-//            wait_creation = 1;
-//            for (i = 0; i < worker_count; ++i) {
-//                if(workers_bitmap[i]==0) wait_creation=0;
-//            }
-//            sleep(1);
-//        }
-//        printf("WORKERS READY\n");
-//    }
+
     kill(0, SIGINT);
     printf("KILL %d CHILDREN\n", worker_count);
     for(i = 0; i < worker_count; i++){
@@ -878,7 +851,10 @@ void handler(int signum){
 //    char message_to_log[BUF_SIZE];
     char message_to_log[BUF_SIZE];
     if(signum == SIGINT && getpid() == ppid){ //main_process
-//        printf("DAD: Sinal '%d' recebido\n", signum);
+#ifdef DEBUG
+        printf("DAD: Sinal '%d' recebido\n", signum);
+#endif
+
         write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
         //lock mutex internal queue
         pthread_mutex_lock(&internal_queue_mutex);
@@ -892,10 +868,10 @@ void handler(int signum){
         pthread_join(thread_sensor_reader, NULL);
         pthread_join(thread_dispatcher, NULL);
 
-        printf("INTERNAL QUEU SIZE: %d\n", internal_queue_size);
+
         //3. store messages from internal_queue
         for (i = 0; i < internal_queue_size; ++i) {
-            sprintf(message_to_log, "---%s", &(get_next_message(internal_queue_console, internal_queue_sensor).cmd[0]));
+            sprintf(message_to_log, "Message not processed: %s", &(get_next_message(internal_queue_console, internal_queue_sensor).cmd[0]));
             write_to_log(message_to_log);
         }
 
@@ -915,34 +891,43 @@ void handler(int signum){
 
         //6. cleaner()
         cleaner();
-        printf("WORKER CLOSING\n");
+
 
         exit(0);
 
     }
     else if(signum == SIGUSR2 && getpid() == ppid){//parent when something goes wrong
+#ifdef DEBUG
         printf("Parent received error\n");
+#endif
         error_cleaner();
     }
     else if(signum == SIGUSR2 && getpid()==alert_watcher_id){ //alert watcher
+#ifdef DEBUG
         printf("ALERT WATCHER CLOSING\n");
+#endif
         exit(0);
     }
     else if(signum == SIGUSR1){ //thread
+#ifdef DEBUG
         printf("THREAD CLOSING\n");
+#endif
         pthread_exit(NULL);
     }
     else if(signum == SIGINT){ //worker
+#ifdef DEBUG
         printf("WORKER: Sinal '%d' recebido\n", signum);
+        printf("WORKER CLOSING\n");
+#endif
         close(disp_work_pipe[worker_index][0]);
         close(disp_work_pipe[worker_index][1]);
         exit(0);
     }
-    else{
+#ifdef DEBUG
+        else{
         printf("LOST %d: Sinal '%d' recebido\n",getpid(), signum);
     }
-
-//TODO: close pipes nos worker process
+#endif
 }
 
 
@@ -952,7 +937,7 @@ int main(int argc, char *argv[]) {
     pid_t childpid;
     internal_queue_size = 0;
     thread_count = 0;
-    alert_watcher_id = -1; //TODO: WHY THIS?
+    alert_watcher_id = -1;
     ppid = getpid();
 
     if (argc != 2) {
@@ -985,9 +970,10 @@ int main(int argc, char *argv[]) {
         }
         fclose(fp);
     }
-//    printf("%d\n%d\n%d\n%d\n%d\n", QUEUE_SZ,N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS);
+#ifdef DEBUG
+    printf("%d\n%d\n%d\n%d\n%d\n", QUEUE_SZ,N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS);
+#endif
 
-//TODO: signals
     action.sa_flags=0;
     sigfillset(&action.sa_mask);
     sigdelset(&action.sa_mask, SIGINT);
@@ -995,13 +981,6 @@ int main(int argc, char *argv[]) {
     sigdelset(&action.sa_mask, SIGUSR2);
     sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
 
-//    sigfillset(&block_set);
-//    sigdelset(&block_set, SIGINT);
-//    sigdelset(&block_set, SIGPIPE);
-//    sigdelset(&block_set, SIGUSR1);
-//    sigprocmask(SIG_SETMASK, &block_set, NULL);
-
-//    action.sa_handler = &handle_main_process;
 
     //ignore signals during setup
     action.sa_handler = SIG_IGN;
@@ -1016,7 +995,6 @@ int main(int argc, char *argv[]) {
 
 
 
-//TODO: 6 int
     //creates memory
     shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + ( MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) ) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 6 * sizeof(int), IPC_CREAT | 0777);
     if (shmid < 1){
@@ -1032,9 +1010,9 @@ int main(int argc, char *argv[]) {
 
 
 
-    data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
+    data_base = (key_data*) shm_global;                                         //store data sent by sensors
     alert_list = (Alert*) ((char*)data_base + MAX_KEYS * sizeof(key_data));     //store alerts
-    sensor_list = (char **) ((char*)alert_list + MAX_ALERTS * sizeof(Alert));      //store sensors //2semaforos
+    sensor_list = (char **) ((char*)alert_list + MAX_ALERTS * sizeof(Alert));   //store sensors
     for(i =0; i<MAX_SENSORS;i++){
         sensor_list[i] = (char *) ((char *)sensor_list + MAX_SENSORS * sizeof(char *) + i * sizeof(char[STR_SIZE]));
     }
@@ -1046,8 +1024,6 @@ int main(int argc, char *argv[]) {
     database_readers = (int *) ((char*)keys_bitmap + (MAX_KEYS + 3) * sizeof(int));
     alert_readers  = (int *) ((char*)keys_bitmap + (MAX_KEYS + 4) * sizeof(int));
     sensor_readers = (int *) ((char*)keys_bitmap + (MAX_KEYS + 5) * sizeof(int));
-
-
 
     for (i = 0; i < N_WORKERS; ++i) {
         workers_bitmap[i] = 0;
@@ -1293,74 +1269,16 @@ int main(int argc, char *argv[]) {
 
 
 
-
-//TODO: signals return -1
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGUSR2, &action, NULL);
     sigaction(SIGUSR1, &action, NULL);
 
     pause();
 
-//    write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
-//
-//
-//    //join threads
-//    pthread_join(thread_console_reader, NULL);
-//    pthread_join(thread_sensor_reader, NULL);
-//    pthread_join(thread_dispatcher, NULL);
-//
-//    //wait for workers and alert_watcher
-//    for (i=0;i<N_WORKERS+1; i++) {
-//        wait(NULL);
-//    }
-//
-//    shmdt(shm_global);
-//    shmctl(shmid, IPC_RMID, NULL);
-//
-//    write_to_log("HOME_IOT SIMULATOR CLOSING");
-//    fclose(log_file);
-//
-//    cleaner();
     return 0;
 }
 
 
 //TODO: geral
-//signals
-//semaforos:
-    //DONE - mutex read/write internal queue
-    //DONE - semaforo workers (para dispatcher)
-    //DONE - semaforo number of messages (para dispatcher)
-
-
-    //QUASE DONE - sensor reader - descartar mensagens (qnd a internal queue esta cheia (get_value))
-
-    //console reader - validacao de input
-    //QUASE DONE - console reader - descartar mensagens (qnd a internal queue esta cheia (get_value))
-
-
 //remove alerts when console exits
 
-//REMOVI OS WARNINGS - alterar tamanho da string enviada na msg. HOW? ou mandar cada linha de stats numa mensagem diferente??
-//cuidado com os iteradores globais dentro das threads
-//DONE - quando o worker acabar a tarefa incrementar semaforo: sem_free_worker_count
-
-//ALERT WATCHER
-//SIGNALS
-
-
-//TODO: Miguel
-//console/sensor reader -> internal queue DONE
-//dispatcher forward messages to work DONE
-//DONE - cleanup dos semaforos
-
-//trocar unnamed semaphore para variavel de condicao DONE
-//trocar iteradores - DONE
-
-//sincronizacao DONE //falta alert_watcher
-
-
-
-
-//TODO: Zheeeee?
-//SIGNALS and handles
