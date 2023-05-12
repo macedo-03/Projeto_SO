@@ -8,7 +8,7 @@
 
 // add_alert alert1 TEMP1 3 6
 
-#define DEBUG //remove this line to remove debug messages (...)
+//#define DEBUG //remove this line to remove debug messages (...)
 
 
 #include <stdio.h>
@@ -61,7 +61,7 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 
-int ppid, alert_watcher_id;
+int ppid, alert_watcher_id, thread_count, worker_count;
 int shmid;
 void *shm_global;
 int console_pipe_id, sensor_pipe_id;
@@ -143,11 +143,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
 
 
 
-
-
     //while(1)
     while (1) {
-        printf("%d WHILE\n", worker_number);
         //read instruction from dispatcher pipe
         if(read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message)) == -1){
             perror("WORKER READING FROM PIPE");
@@ -809,17 +806,63 @@ void cleaner(){
     close(console_pipe_id);
     unlink(CONSOLE_PIPE);
 
+
+
     //unnamed pipes
-    int i;
-    for (i = 0; i < N_WORKERS; ++i) {
-        close(disp_work_pipe[i][0]);
-        close(disp_work_pipe[i][1]);
+    if(disp_work_pipe != NULL){
+        int i;
+        for (i = 0; i < N_WORKERS; ++i) {
+            if(disp_work_pipe[i] != NULL){
+                close(disp_work_pipe[i][0]);
+                close(disp_work_pipe[i][1]);
+            }
+            else
+                break;
+        }
     }
+    printf("CHEGUEI\n");
 
     //TODO: PIPES
 
 }
 
+
+void error_cleaner(){
+    sigfillset(&block_extra_set);
+    sigprocmask(SIG_SETMASK, &block_extra_set, NULL);
+    printf("ERROR CLEANER\n");
+    if(thread_count>=1){
+        printf("KILL THREAD 1\n");
+        pthread_kill(thread_console_reader, SIGUSR1);
+        pthread_join(thread_console_reader, NULL);
+    }
+    if(thread_count>=2){
+        printf("KILL THREAD 2\n");
+        pthread_kill(thread_sensor_reader, SIGUSR1);
+        pthread_join(thread_sensor_reader, NULL);
+    }
+    if(thread_count==3){
+        printf("KILL THREAD 3\n");
+        pthread_kill(thread_dispatcher, SIGUSR1);
+        pthread_join(thread_dispatcher, NULL);
+    }
+
+    if(alert_watcher_id != -1){
+        printf("KILL ALERT WATCHER\n");
+        kill(alert_watcher_id, SIGUSR2);
+        wait(&alert_watcher_id);
+    }
+
+    kill(0, SIGINT);
+    printf("KILL CHILDREN\n");
+    int i;
+    for(i = 0; i < worker_count; i++){
+        wait(NULL);
+    }
+    printf("CLEAN ALL\n");
+    cleaner();
+    exit(-1);
+}
 
 
 void handler(int signum){
@@ -827,7 +870,7 @@ void handler(int signum){
     int i;
     char message_to_log[BUF_SIZE];
     if(signum == SIGINT && getpid() == ppid){ //main_process
-        printf("DAD: Sinal '%d' recebido\n", signum);
+//        printf("DAD: Sinal '%d' recebido\n", signum);
         write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
         //lock mutex internal queue
         pthread_mutex_lock(&internal_queue_mutex);
@@ -841,7 +884,7 @@ void handler(int signum){
         pthread_join(thread_sensor_reader, NULL);
         pthread_join(thread_dispatcher, NULL);
 
-        //3. store messages in internal_queue
+        //3. store messages from internal_queue
         for (i = 0; i < internal_queue_size; ++i) {
             sprintf(message_to_log, "%s", get_next_message(internal_queue_console, internal_queue_sensor).cmd);
             write_to_log(message_to_log);
@@ -868,6 +911,10 @@ void handler(int signum){
         exit(0);
 
     }
+    else if(signum == SIGUSR2 && getpid() == ppid){//parent when something goes wrong
+        printf("Parent received error\n");
+        error_cleaner();
+    }
     else if(signum == SIGUSR2 && getpid()==alert_watcher_id){ //alert watcher
         printf("ALERT WATCHER CLOSING\n");
         exit(0);
@@ -888,7 +935,7 @@ void handler(int signum){
         printf("LOST %d: Sinal '%d' recebido\n",getpid(), signum);
     }
 
-
+//TODO: close pipes nos worker process
 }
 
 
@@ -896,6 +943,7 @@ void handler(int signum){
 int main(int argc, char *argv[]) {
     int i, j;
     internal_queue_size = 0;
+    thread_count = 0;
     ppid = getpid();
 
     if (argc != 2) {
@@ -957,10 +1005,11 @@ int main(int argc, char *argv[]) {
     action.sa_handler = handler;
 
 
+
     id_t childpid;
 //TODO: 6 int
     //creates memory
-    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + ( MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) ) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 3 * sizeof(int), IPC_CREAT | 0777);
+    shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + ( MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) ) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 6 * sizeof(int), IPC_CREAT | 0777);
     if (shmid < 1) exit(0);
     shm_global = (key_data *) shmat(shmid, NULL, 0);
     if ((void*) shm_global == (void*) -1) exit(0);
@@ -1119,13 +1168,6 @@ int main(int argc, char *argv[]) {
         exit(-1);
     }
 
-    //TODO: tirar isto qnd tiver handle
-    msgctl(mq_id, IPC_RMID, NULL);
-    if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
-        perror("Cannot open or create message queue\n");
-        exit(-1);
-    }
-    //
 
 
     //create one unnamed pipe for each worker
@@ -1195,22 +1237,22 @@ int main(int argc, char *argv[]) {
     if(pthread_create(&thread_console_reader, NULL, console_reader, NULL) != 0){
         perror("Cannot create thread.");
         exit(-1);
-    }
+    }thread_count++;
     if(pthread_create(&thread_sensor_reader, NULL, sensor_reader, NULL) != 0){
         perror("Cannot create thread.");
         exit(-1);
-    }
+    }thread_count++;
     if(pthread_create(&thread_dispatcher, NULL, dispatcher, NULL) != 0){
         perror("Cannot create thread.");
         exit(-1);
-    }
+    }thread_count++;
 
 
 
 
 //TODO: signals return -1
     sigaction(SIGINT, &action, NULL);
-    sigaction(SIGPIPE, &action, NULL);
+    sigaction(SIGUSR2, &action, NULL);
     sigaction(SIGUSR1, &action, NULL);
 
     pause();

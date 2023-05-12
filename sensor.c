@@ -47,16 +47,34 @@
 
 //#define DEBUG //remove this line to remove debug messages (...)
 
+//} else if(signum == SIGTSTP){
+//printf("N. Messages = %lld\n" , n_messages);
+//}
+
 #include <unistd.h> // process
 #include <stdio.h>
 #include <stdlib.h>
 #include <fcntl.h>
 #include <sys/msg.h>
+#include <signal.h>
 
 #include "costumio.h"
 #define PIPE_NAME "SENSOR_PIPE"
 #define BUF_SIZE 64
 int pipe_id;
+long long n_messages;
+struct sigaction action;
+//sigset_t block_extra_set;
+
+void handler(int signum){
+    if(signum == SIGTSTP){
+        printf("N. Messages = %lld\n" , n_messages);
+    }else if(signum == SIGINT){
+        close(pipe_id);
+        exit(0);
+    }
+}
+
 
 int main(int argc, char *argv[]){
 //        char sensor_id[], int interval, char key[],  int min, int max){
@@ -79,6 +97,21 @@ int main(int argc, char *argv[]){
         printf("sensor {sensor_id} {sending interval (sec) (>=0)} {key} {min value} {max value}\n");
         exit(-1);
     }
+
+
+
+    action.sa_flags=0;
+    sigfillset(&action.sa_mask);
+    sigdelset(&action.sa_mask, SIGINT);
+    sigdelset(&action.sa_mask, SIGTSTP);
+
+    sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
+
+    action.sa_handler = SIG_IGN;
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGTSTP, &action, NULL);
+
+
     //abrir sensor para leitura
     if ((pipe_id = open(PIPE_NAME, O_WRONLY)) < 0) {
             perror("Cannot open pipe for writing!\n");
@@ -86,18 +119,25 @@ int main(int argc, char *argv[]){
     }
     srand(getpid());
 
+    //define handler function to use after setup
+    action.sa_handler = handler;
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGTSTP, &action, NULL);
+
+
     char msg[BUF_SIZE];
     while(1){
         sprintf(msg, "%s#%s#%d", argv[1], argv[3], rand() % (max_value-min_value+1) + min_value);
 #ifdef DEBUG
         printf("%s\n", msg);
 #endif
-        //EPIPE
 
         if (write(pipe_id, &msg, BUF_SIZE)==-1){
+            close(pipe_id);
             perror("error writing to pipe");
             exit(-1);
         }
+        n_messages++;
         sleep(time_interval);
     }
     return 0;

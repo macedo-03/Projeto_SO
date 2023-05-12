@@ -29,13 +29,31 @@ typedef struct
 
 
 int pipe_id, mq_id, id, valido = 1;
+
 pthread_t mq_reader;
 Message msg;
 struct sigaction action;
+sigset_t block_extra_set;
 
-void handler(){
-    exit(0);
+
+void clean(){
+    pthread_kill(mq_reader, SIGUSR1);
+    pthread_join(mq_reader, NULL);
+
+    close(pipe_id);
 }
+
+void handler(int signum){
+    if(signum == SIGUSR1){
+        pthread_exit(NULL);
+    }
+    else if(signum == SIGINT) {
+        clean();
+        exit(0);
+    }
+}
+
+
 
 void *read_msq(){
     while (1) {
@@ -70,24 +88,51 @@ int main(int argc, char *argv[]){
     char str_min[16], str_max[16];
     int min, max;
 
-    //abrir pipe para escrita
-    if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
-                perror("Cannot open pipe for writing!\n");
-                exit(-1); 
-    }
+    action.sa_flags=0;
+    sigfillset(&action.sa_mask);
+    sigdelset(&action.sa_mask, SIGINT);
+    sigdelset(&action.sa_mask, SIGUSR1);
+    sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
+
+    action.sa_handler = SIG_IGN;
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGUSR1, &action, NULL);
+
+    sigemptyset(&block_extra_set);
+    sigaddset(&block_extra_set, SIGINT);
+    sigaddset(&block_extra_set, SIGUSR1);
+
+
+    //define handler function to use after setup
+    action.sa_handler = handler;
 
     //abrir a message queue
     if ((mq_id = msgget(MQ_KEY, 0777)) < 0) {
-                perror("Cannot open message queue!\n");
-                exit(-1); 
+        perror("Cannot open message queue!\n");
+        exit(-1);
     }
 
+    //abrir pipe para escrita
+    if ((pipe_id = open(CONSOLE_PIPE, O_WRONLY)) < 0) {
+            perror("Cannot open pipe for writing!\n");
+            exit(-1);
+    }
+
+
     id = getpid();
-    pthread_create(&mq_reader, NULL, read_msq, NULL);
+
+    if(pthread_create(&mq_reader, NULL, read_msq, NULL)!=0){
+        perror("Cannot create thread\n");
+        close(pipe_id);
+        exit(-1);
+    }
 
     Message m;
     m.message_id = id;
     m.type = 0;
+
+    sigaction(SIGINT, &action, NULL);
+    sigaction(SIGUSR1, &action, NULL);
 
 
     printf("Menu:\n"
@@ -106,11 +151,11 @@ int main(int argc, char *argv[]){
     sscanf(buf, "%s", cmd);
     if(!input_str(cmd, 1)){
         printf("Erro de formatacao do comando\n");
-//        exit(-1); //TODO: isto e suposto tirar certo?
     }
 
 
     while (strcmp(cmd, "EXIT")!=0){
+        sigprocmask(SIG_BLOCK, &block_extra_set, NULL);
         valido = 1;
         if(strcmp(cmd, "ADD_ALERT")==0){
             sscanf(buf, "%s %s %s %s %s", cmd, alert_id, key, str_min, str_max);
@@ -179,20 +224,22 @@ int main(int argc, char *argv[]){
             string_to_upper(buf);
             strcpy(m.cmd, buf);
             if (write(pipe_id, &m, sizeof(Message))==-1){
-//                if(errno == EPIPE)
+                clean();
                 perror("error writing to pipe");
                 exit(-1);
             }
 
-        }
 
+        }
+        sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
 
         fgets(buf, BUF_SIZE, stdin);
         sscanf(buf, "%s", cmd);
         if(!input_str(cmd, 1)){
             printf("Erro de formatacao do Comando\n");
-            exit(-1);
+//            exit(-1);
         }
+
     }
 
 //    send "exit" to system_manager
