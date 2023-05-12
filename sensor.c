@@ -64,16 +64,17 @@
 int pipe_id;
 long long n_messages;
 struct sigaction action;
-//sigset_t block_extra_set;
+sigset_t block_extra_set;
 
 void handler(int signum){
     if(signum == SIGTSTP){
-        printf("N. Messages = %lld\n" , n_messages);
+        printf("\nMessages Counter = %lld\n" , n_messages);
     }else if(signum == SIGINT){
         close(pipe_id);
         exit(0);
     }
 }
+
 
 
 int main(int argc, char *argv[]){
@@ -107,6 +108,9 @@ int main(int argc, char *argv[]){
 
     sigprocmask(SIG_SETMASK, &action.sa_mask, NULL);
 
+    sigemptyset(&block_extra_set);
+    sigaddset(&block_extra_set, SIGTSTP);
+
     action.sa_handler = SIG_IGN;
     sigaction(SIGINT, &action, NULL);
     sigaction(SIGTSTP, &action, NULL);
@@ -131,12 +135,13 @@ int main(int argc, char *argv[]){
 #ifdef DEBUG
         printf("%s\n", msg);
 #endif
-
+        sigprocmask(SIG_BLOCK, &block_extra_set, NULL);
         if (write(pipe_id, &msg, BUF_SIZE)==-1){
             close(pipe_id);
             perror("error writing to pipe");
             exit(-1);
         }
+        sigprocmask(SIG_UNBLOCK, &block_extra_set, NULL);
         n_messages++;
         sleep(time_interval);
     }

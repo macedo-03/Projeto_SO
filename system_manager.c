@@ -50,7 +50,6 @@ typedef struct
 } Alert;
 
 
-
 pthread_mutex_t internal_queue_mutex = PTHREAD_MUTEX_INITIALIZER; //protects access to internal queue
 
 //pthread_mutex_t int_queue_size_mutex = PTHREAD_MUTEX_INITIALIZER; //protects variable internal_queue_size -> no read or write
@@ -61,7 +60,8 @@ pthread_t thread_console_reader, thread_sensor_reader, thread_dispatcher;
 int QUEUE_SZ, N_WORKERS, MAX_KEYS, MAX_SENSORS, MAX_ALERTS;
 char QUEUE_SZ_str[MY_MAX_INPUT], N_WORKERS_str[MY_MAX_INPUT], MAX_KEYS_str[MY_MAX_INPUT], MAX_SENSORS_str[MY_MAX_INPUT], MAX_ALERTS_str[MY_MAX_INPUT];
 
-int ppid, alert_watcher_id, thread_count, worker_count;
+int ppid, alert_watcher_id, thread_count, worker_count, worker_index;
+
 int shmid;
 void *shm_global;
 int console_pipe_id, sensor_pipe_id;
@@ -112,9 +112,17 @@ void write_to_log(char *message_to_log){
 
 void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     int i, j;
-    alert_watcher_id = -1;
+    worker_index = worker_number;
+    //TODO: close pipes
+    for ( i = 0; i <N_WORKERS; ++i) { //close pipes not being used in this process
+        if(i != worker_number){
+            close(disp_work_pipe[i][0]);
+            close(disp_work_pipe[i][1]);
+        }
+    }
+
+
     char alert_id[STR_SIZE], key[STR_SIZE], sensor_id[STR_SIZE];
-//    char str_min[16], str_max[16];
     int min, max, value;
     int validated, new_sensor, new_key;
 
@@ -141,10 +149,8 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2]){
     write_to_log(message_to_log);
 
 
-
-
     //while(1)
-    while (1) {
+    while (1) { //TODO: trocar read para <1
         //read instruction from dispatcher pipe
         if(read(from_dispatcher_pipe[0], &message_to_process, sizeof(Message)) == -1){
             perror("WORKER READING FROM PIPE");
@@ -696,41 +702,28 @@ void *console_reader(){
 
 void *dispatcher(){
     int k;
-    int temporario;
     write_to_log("THREAD DISPATCHER CREATED");
 
 
     while(1){
-//        pthread_mutex_lock(&int_queue_size_mutex);
-//        while(internal_queue_size==0){
-//            pthread_cond_wait(&new_message_cv, &int_queue_size_mutex);
-//        }
-//        pthread_mutex_unlock(&int_queue_size_mutex);
 
         sem_wait(&internal_queue_full_count); // menos um cheio
-//        sem_getvalue(&internal_queue_full_count, &temporario);
-//        printf("dispatcher FULL: %d\n", temporario);
 
 
-//        sem_getvalue(sem_free_worker_count, &temporario);
-//        printf("dispatcher FREE_WORKERS: %d\n", temporario);
         //prende pelo semaforo dos workers
         sem_wait(sem_free_worker_count);
 
 
         //lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
-//        printf("dispatcher mutex lock\n");
-//        //prende pelo semaforo da internal queue
-//        sem_wait(&internal_queue_full_count);
+
         //executa codigo em baixo
 #ifdef DEBUG
         printf("internal queue size before = %d\n", internal_queue_size);
 #endif
         Message message_to_dispatch = get_next_message(internal_queue_console, internal_queue_sensor);
         sem_post(&internal_queue_empty_count); // // mais um vazio
-//        sem_getvalue(&internal_queue_empty_count, &temporario);
-//        printf("dispatcher EMPTY: %d\n", temporario);
+
 #ifdef DEBUG
         printf("internal queue size after = %d\n", internal_queue_size);
 #endif
@@ -740,7 +733,6 @@ void *dispatcher(){
 #ifdef DEBUG
                 printf("Message dispatched: %s\t worker: %d\n", message_to_dispatch.cmd, k+1);
 #endif
-
                 if(write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message)) == -1){
                     perror("write to pipe");
                     exit(-1);
@@ -783,7 +775,7 @@ void cleaner(){
     sem_close(sem_alert_watcher); sem_unlink("/sem_alert_watcher");
     sem_close(sem_alert_worker); sem_unlink("/sem_alert_worker");
 
-    sem_destroy(&internal_queue_full_count); //TODO: mantemos isto? deprecated
+    sem_destroy(&internal_queue_full_count);
     sem_destroy(&internal_queue_empty_count);
 
     //pthread_mutex
@@ -820,7 +812,7 @@ void cleaner(){
                 break;
         }
     }
-    printf("CHEGUEI\n");
+
 
     //TODO: PIPES
 
@@ -847,18 +839,33 @@ void error_cleaner(){
         pthread_join(thread_dispatcher, NULL);
     }
 
+
+
+    int i;
+//    if(worker_count>0){
+//        int wait_creation=0;
+//        while (wait_creation==0){
+//            wait_creation = 1;
+//            for (i = 0; i < worker_count; ++i) {
+//                if(workers_bitmap[i]==0) wait_creation=0;
+//            }
+//            sleep(1);
+//        }
+//        printf("WORKERS READY\n");
+//    }
+    kill(0, SIGINT);
+    printf("KILL %d CHILDREN\n", worker_count);
+    for(i = 0; i < worker_count; i++){
+        wait(NULL);
+    }
+
     if(alert_watcher_id != -1){
         printf("KILL ALERT WATCHER\n");
         kill(alert_watcher_id, SIGUSR2);
         wait(&alert_watcher_id);
     }
 
-    kill(0, SIGINT);
-    printf("KILL CHILDREN\n");
-    int i;
-    for(i = 0; i < worker_count; i++){
-        wait(NULL);
-    }
+
     printf("CLEAN ALL\n");
     cleaner();
     exit(-1);
@@ -868,6 +875,7 @@ void error_cleaner(){
 void handler(int signum){
 
     int i;
+//    char message_to_log[BUF_SIZE];
     char message_to_log[BUF_SIZE];
     if(signum == SIGINT && getpid() == ppid){ //main_process
 //        printf("DAD: Sinal '%d' recebido\n", signum);
@@ -884,9 +892,10 @@ void handler(int signum){
         pthread_join(thread_sensor_reader, NULL);
         pthread_join(thread_dispatcher, NULL);
 
+        printf("INTERNAL QUEU SIZE: %d\n", internal_queue_size);
         //3. store messages from internal_queue
         for (i = 0; i < internal_queue_size; ++i) {
-            sprintf(message_to_log, "%s", get_next_message(internal_queue_console, internal_queue_sensor).cmd);
+            sprintf(message_to_log, "---%s", &(get_next_message(internal_queue_console, internal_queue_sensor).cmd[0]));
             write_to_log(message_to_log);
         }
 
@@ -925,10 +934,8 @@ void handler(int signum){
     }
     else if(signum == SIGINT){ //worker
         printf("WORKER: Sinal '%d' recebido\n", signum);
-//        for (i = 0; i < N_WORKERS; ++i) {
-//            close(disp_work_pipe[i][0]);
-//            close(disp_work_pipe[i][1]);
-//        }
+        close(disp_work_pipe[worker_index][0]);
+        close(disp_work_pipe[worker_index][1]);
         exit(0);
     }
     else{
@@ -942,8 +949,10 @@ void handler(int signum){
 
 int main(int argc, char *argv[]) {
     int i, j;
+    pid_t childpid;
     internal_queue_size = 0;
     thread_count = 0;
+    alert_watcher_id = -1; //TODO: WHY THIS?
     ppid = getpid();
 
     if (argc != 2) {
@@ -1006,13 +1015,21 @@ int main(int argc, char *argv[]) {
 
 
 
-    id_t childpid;
+
 //TODO: 6 int
     //creates memory
     shmid = shmget(IPC_PRIVATE, MAX_KEYS * sizeof(key_data) + MAX_ALERTS * sizeof(Alert) + ( MAX_SENSORS * sizeof(char *) + MAX_SENSORS * sizeof(char[STR_SIZE]) ) + N_WORKERS * sizeof(int) + MAX_KEYS * sizeof(int) + 6 * sizeof(int), IPC_CREAT | 0777);
-    if (shmid < 1) exit(0);
+    if (shmid < 1){
+        perror("error getting shared memory");
+        exit(-1);
+    }
     shm_global = (key_data *) shmat(shmid, NULL, 0);
-    if ((void*) shm_global == (void*) -1) exit(0);
+    if ((void*) shm_global == (void*) -1){
+        error_cleaner();
+        perror("error attaching shared memory");
+        exit(-1);
+    }
+
 
 
     data_base = (key_data*) shm_global;                                 //store data sent by sensors //2semaforos
@@ -1050,73 +1067,87 @@ int main(int argc, char *argv[]) {
     //cretes named semaphores to protect the shared memory
     sem_unlink("/sem_data_base_reader");
     if ((sem_data_base_reader = sem_open("/sem_data_base_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
+        error_cleaner();
         perror("named semaphore initialization");
-        exit(-1);
+//        exit(-1);
     }
     sem_unlink("/sem_data_base_writer");
     if ((sem_data_base_writer = sem_open("/sem_data_base_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_alert_list_writer");
     if ((sem_alert_list_writer = sem_open("/sem_alert_list_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_alert_list_reader");
     if ((sem_alert_list_reader = sem_open("/sem_alert_list_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_sensor_list_reader");
     if ((sem_sensor_list_reader = sem_open("/sem_sensor_list_reader", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_sensor_list_writer");
     if ((sem_sensor_list_writer = sem_open("/sem_sensor_list_writer", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_workers_bitmap");
     if ((sem_workers_bitmap = sem_open("/sem_workers_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_keys_bitmap");
     if ((sem_keys_bitmap = sem_open("/sem_keys_bitmap", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/log_mutex");
     if ((log_mutex = sem_open("/log_mutex", O_CREAT | O_EXCL, 0777, 1)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_free_worker_count");
     if ((sem_free_worker_count = sem_open("/sem_free_worker_count", O_CREAT | O_EXCL, 0777, N_WORKERS)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_alert_watcher");
     if ((sem_alert_watcher = sem_open("/sem_alert_watcher", O_CREAT | O_EXCL, 0777, 0)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     sem_unlink("/sem_alert_worker");
     if ((sem_alert_worker = sem_open("/sem_alert_worker", O_CREAT | O_EXCL, 0777, 0)) == SEM_FAILED) {
         perror("named semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     if (sem_init(&internal_queue_full_count, 0, 0) < 0) {
         perror("unnamed semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
     if (sem_init(&internal_queue_empty_count, 0, QUEUE_SZ) < 0) {
         perror("unnamed semaphore initialization");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
-    
+
 
 
     //codigo para testar shm
@@ -1142,7 +1173,8 @@ int main(int argc, char *argv[]) {
     log_file = fopen(log_name, "a+"); //read and append
     if (log_file == NULL)
     {
-        printf("Error: could not open file %s\n", log_name);
+        perror("could not open log file");
+        error_cleaner();
     }
     else{
 
@@ -1165,7 +1197,8 @@ int main(int argc, char *argv[]) {
     //open/create msg queue
     if((mq_id = msgget(MQ_KEY, IPC_CREAT | 0777)) <0){
         perror("Cannot open or create message queue\n");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }
 
 
@@ -1176,7 +1209,8 @@ int main(int argc, char *argv[]) {
         disp_work_pipe[j] = malloc(2*sizeof(int));
         if(pipe(disp_work_pipe[j]) == -1){
             perror("Cannot create unnamed pipe\n");
-            exit(-1);
+            error_cleaner();
+//            exit(-1);
         }
     }
 
@@ -1185,50 +1219,57 @@ int main(int argc, char *argv[]) {
     //creates WORKERS
     i=0;
     while (i < N_WORKERS){
-        if ((childpid = fork()) == 0)
+        if ((childpid = fork()) == (pid_t)0)
         {
             worker_process(i, disp_work_pipe[i]);
             exit(0);
         }
-        else if (childpid == -1)
+        else if (childpid == (pid_t)-1)
         {
             perror("Failed to create worker process\n");
-            exit(1);
+            error_cleaner();
+//            exit(-1);
         }
+        worker_count++;
         ++i;
     }
 
     //creates ALERT WATCHER
-    if ((alert_watcher_id = fork()) == 0){
+    if ((alert_watcher_id = fork()) == (pid_t) 0){
         alerts_watcher_process();
         exit(0);
     }
-    else if (alert_watcher_id == -1)
+    else if (alert_watcher_id == (pid_t) -1)
     {
         perror("Failed to create alert_watcher process\n");
-        exit(1);
+        error_cleaner();
+//        exit(-1);
     }
 
 
     //opens named pipes
     unlink(CONSOLE_PIPE);
     if((mkfifo(CONSOLE_PIPE, O_CREAT | O_EXCL |0777)<0) && errno!=EEXIST){
-        perror("Cannot create pipe.");
-        exit(-1);
+        perror("Cannot create console pipe.");
+        error_cleaner();
+//        exit(-1);
     }
     if((console_pipe_id = open(CONSOLE_PIPE, O_RDWR)) <0){
-        perror("Cannot open pipe");
-        exit(-1);
+        perror("Cannot open console pipe");
+        error_cleaner();
+//        exit(-1);
     }
 
     unlink(SENSOR_PIPE);
     if((mkfifo(SENSOR_PIPE, O_CREAT | O_EXCL |0777)<0) && errno!=EEXIST){
-        perror("Cannot create pipe.");
-        exit(-1);
+        perror("Cannot create sensor pipe.");
+        error_cleaner();
+//        exit(-1);
     }
     if((sensor_pipe_id = open(SENSOR_PIPE, O_RDWR)) <0){
-        perror("Cannot open pipe");
-        exit(-1);
+        perror("Cannot open sensor pipe");
+        error_cleaner();
+//        exit(-1);
     }
 
 
@@ -1236,15 +1277,18 @@ int main(int argc, char *argv[]) {
 //create threads
     if(pthread_create(&thread_console_reader, NULL, console_reader, NULL) != 0){
         perror("Cannot create thread.");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }thread_count++;
     if(pthread_create(&thread_sensor_reader, NULL, sensor_reader, NULL) != 0){
         perror("Cannot create thread.");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }thread_count++;
     if(pthread_create(&thread_dispatcher, NULL, dispatcher, NULL) != 0){
         perror("Cannot create thread.");
-        exit(-1);
+        error_cleaner();
+//        exit(-1);
     }thread_count++;
 
 
