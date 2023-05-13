@@ -564,7 +564,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2])
                 *count_sensors += 1;
             }
             else if (!validated)
-            { // if it isn't validated -> discardthe message
+            { // if it isn't validated -> discard the message
                 sprintf(message_to_log, "WORKER: Sensor message discarded: %s", message_to_process.cmd);
                 write_to_log(message_to_log);
             }
@@ -585,7 +585,7 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2])
             // unlock access to data_base
             sem_post(sem_data_base_writer);
         }
-        sprintf(message_to_log, "WORKER %d READY", worker_number + 1);
+        sprintf(message_to_log, "WORKER%d: '%s' PROCESSING COMPLETE", worker_number + 1, message_to_process.cmd);
         write_to_log(message_to_log);
         // mark this worker as available
         workers_bitmap[worker_number] = 1; // 1 - available
@@ -773,6 +773,7 @@ void *console_reader()
 void *dispatcher()
 {
     int k;
+    char message_to_log[BUF_SIZE];
     write_to_log("THREAD DISPATCHER CREATED");
 
     while (1)
@@ -800,6 +801,8 @@ void *dispatcher()
 #ifdef DEBUG
                 printf("Message dispatched: %s\t worker: %d\n", message_to_dispatch.cmd, k + 1);
 #endif
+                sprintf(message_to_log, "DISPATCHER: '%s' SENT FOR PROCESSING ON WORKER %d", message_to_dispatch.cmd, k+1);
+                write_to_log(message_to_log);
                 // send message to worker to be processed
                 if (write(disp_work_pipe[k][1], &message_to_dispatch, sizeof(Message)) == -1)
                 {
@@ -894,6 +897,7 @@ void error_cleaner()
 #ifdef DEBUG
     printf("ERROR CLEANER\nKill threads\n");
 #endif
+    write_to_log("ERROR! Closing...");
 
     // kill and join the threads that have been created
     if (thread_count >= 1)
@@ -950,7 +954,7 @@ void handler(int signum)
 #ifdef DEBUG
         printf("DAD: Sinal '%d' recebido\n", signum);
 #endif
-
+        write_to_log("SIGNAL SIGINT RECEIVED");
         write_to_log("HOME_IOT SIMULATOR WAITING FOR LAST TASKS TO FINISH");
         // exclusive lock internal queue
         pthread_mutex_lock(&internal_queue_mutex);
