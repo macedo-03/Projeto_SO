@@ -38,7 +38,7 @@ void insert_internal_queue(InternalQueue *this_internal_queue, Message *message_
     }
 }
 
-
+//funcao que remove uma mensagem da internal queue
 Message delete_node(InternalQueue* this_internal_queue){
     Message message_to_dispatch = this_internal_queue->start->message;
     NoInternalQueue *node_to_delete = this_internal_queue->start;
@@ -48,7 +48,6 @@ Message delete_node(InternalQueue* this_internal_queue){
     }else{
         this_internal_queue->start = this_internal_queue->start->next;
     }
-//    printf("DELETER: %s\n", message_to_dispatch.cmd);
     this_internal_queue->size--;
     internal_queue_size--;
 
@@ -56,6 +55,7 @@ Message delete_node(InternalQueue* this_internal_queue){
     return message_to_dispatch;
 }
 
+//funcao que retorna a mensagem seguinte da internal queue
 Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* internal_queue_sensor){
     Message m;
     if(internal_queue_console->size>0){
@@ -65,6 +65,5 @@ Message get_next_message(InternalQueue* internal_queue_console, InternalQueue* i
         m =  delete_node(internal_queue_sensor);
     }
 
-//    printf("NEXT MESSAGE: %s\n", m.cmd);
     return m;
 }
