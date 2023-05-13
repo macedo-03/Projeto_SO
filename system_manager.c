@@ -463,7 +463,10 @@ void worker_process(int worker_number, int from_dispatcher_pipe[2])
         { // mensagem sensor
 
             char *token;
-            token = strtok(message_to_process.cmd, "#");
+            char copy_cmd[256];
+            strcpy(copy_cmd, message_to_process.cmd);
+
+            token = strtok(copy_cmd, "#");
             strcpy(sensor_id, token);
 
             token = strtok(NULL, "#");
